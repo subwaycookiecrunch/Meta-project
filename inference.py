@@ -7,11 +7,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from openai import OpenAI
 from code_review_env import CodeReviewEnv, CodeReviewAction
 
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
-MODEL_NAME = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-Coder-32B-Instruct")
-HF_TOKEN = os.environ.get("HF_TOKEN", os.environ.get("API_KEY"))
-LOCAL_IMAGE_NAME = os.environ.get("LOCAL_IMAGE_NAME")
+if HF_TOKEN is None:
+    raise ValueError("HF_TOKEN environment variable is required")
+
+client = OpenAI(
+    base_url=API_BASE_URL,
+    api_key=HF_TOKEN
+)
 
 TASK_NAME = "code_review"
 BENCHMARK = "code_review_env"
@@ -32,13 +38,7 @@ def log_end(success: bool, steps: int, rewards: List[float]) -> None:
     print(f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}", flush=True)
 
 def main():
-    if not HF_TOKEN:
-        print("Please set the HF_TOKEN environment variable.", file=sys.stderr)
-        sys.exit(1)
-
-    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
-    
-    env_url = os.environ.get("ENV_SERVER_URL", "http://127.0.0.1:8000")
+    env_url = os.getenv("ENV_SERVER_URL", "http://127.0.0.1:8000")
     
     tasks = ["easy", "medium", "hard"]
     overall_scores = []
