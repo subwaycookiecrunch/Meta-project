@@ -7,9 +7,9 @@ sdk: docker
 pinned: false
 ---
 
-# 🛡️ CodeReviewEnv: Triage CVEs Like a Pro
+# CodeReviewEnv: Triage CVEs Like a Pro
 
-*Built for the Meta/PyTorch OpenEnv Hackathon* 🚀
+*Built for the Meta/PyTorch OpenEnv Hackathon*
 
 Most RL environments are toy setups like GridWorld. We wanted to tackle a real problem: **Vulnerability Triage**. 
 
@@ -20,14 +20,14 @@ We have 1715 files across 65 CVEs pulled directly from actual GitHub patches.
 We hit the agent with **Asymmetric Rewards**. In the real world, missing a critical bug (False Negative) is infinitely worse than accidentally flagging a safe file (False Positive). 
 
 Our reward table forces the agent to balance its paranoia:
-- **Found a bug:** +1.0
-- **Correctly skipped a safe file:** +0.8
-- **Flagged a safe file:** +0.4
-- **Missed a real bug:** 0.0
+* Found a bug: +1.0
+* Correctly skipped a safe file: +0.8
+* Flagged a safe file: +0.4
+* Missed a real bug: 0.0
 
 Oh, and there's a strict **Review Budget**. You can't just flag everything, or you run out of budget. 
 
-## 🛠️ Setup & Running
+## Setup & Running
 
 **1. Install deps:**
 ```bash
@@ -41,7 +41,7 @@ docker run -p 8000:8000 codereviewenv
 ```
 *(If you are viewing this on Hugging Face Spaces, the server is automatically running securely!)*
 
-## 🤖 The Agents (We built two!)
+## The Agents (We built two!)
 
 ### 1. The Zero-Shot LLM Baseline (`inference.py`)
 This is the standard OpenEnv submission script required by the Hackathon. We wrote a wrapper that passes the environment state into any OpenAI-compatible LLM to see if a huge model can reason through the file stats to allocate its budget.
@@ -58,12 +58,11 @@ We built a custom Deep Reinforcement Learning Agent using native PyTorch Policy 
 python train_pytorch_agent.py
 ```
 
-## 📁 Hackathon Repo Tour
+## Hackathon Repo Tour
+* Dockerfile & openenv.yaml: The OpenEnv backend deployment wrappers
+* inference.py: The mandatory LLM endpoint validation script
+* train_pytorch_agent.py: Our custom PyTorch REINFORCE brain
+* /server/environment.py: Where the magic reward mathematics happen
+* /data/: The actual scraped CVE GitHub dataset 
 
-- `Dockerfile` & `openenv.yaml` - The OpenEnv backend deployment wrappers
-- `inference.py` - The mandatory LLM endpoint validation script
-- `train_pytorch_agent.py` - Our custom PyTorch REINFORCE brain
-- `/server/environment.py` - Where the magic reward mathematics happen
-- `/data/` - The actual scraped CVE GitHub dataset 
-
-MIT License. Thanks for checking it out! ✌️
+MIT License. Thanks for checking it out!
