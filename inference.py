@@ -7,16 +7,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from openai import OpenAI
 from code_review_env import CodeReviewEnv, CodeReviewAction
 
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
-HF_TOKEN = os.getenv("HF_TOKEN")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api-inference.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-Coder-32B-Instruct")
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME", "codereviewenv")
 
-if HF_TOKEN is None:
-    raise ValueError("HF_TOKEN environment variable is required")
+# HF_TOKEN is primary per sample inference.py, API_KEY as fallback
+API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
+
+if API_KEY is None:
+    raise ValueError("HF_TOKEN or API_KEY environment variable is required")
 
 client = OpenAI(
     base_url=API_BASE_URL,
-    api_key=HF_TOKEN
+    api_key=API_KEY
 )
 
 TASK_NAME = "code_review"
@@ -33,9 +36,9 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
         flush=True,
     )
 
-def log_end(success: bool, steps: int, rewards: List[float]) -> None:
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}", flush=True)
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
 
 def main():
     env_url = os.getenv("ENV_SERVER_URL", "http://127.0.0.1:8000")
@@ -47,6 +50,7 @@ def main():
         rewards: List[float] = []
         steps_taken = 0
         success = False
+        score = 0.0
         
         log_start(task=f"{TASK_NAME}_{task_difficulty}", env=BENCHMARK, model=MODEL_NAME)
 
@@ -106,7 +110,10 @@ def main():
 
         finally:
             overall_scores.append(score)
-            log_end(success=success, steps=steps_taken, rewards=rewards)
+            log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+
+    avg_score = sum(overall_scores) / len(overall_scores) if overall_scores else 0.0
+    print(f"\n[SUMMARY] tasks={len(tasks)} avg_score={avg_score:.4f} scores={','.join(f'{s:.4f}' for s in overall_scores)}", flush=True)
 
 if __name__ == "__main__":
     main()

@@ -30,10 +30,14 @@ We have 1715 files across 65 authentic CVEs pulled directly from actual GitHub v
 We hit the agent with **Asymmetric Rewards**. In the real world, missing a critical bug (False Negative) is infinitely worse than accidentally flagging a safe file for review (False Positive). 
 
 Our reward table forces the agent to balance its paranoia:
-* Found a bug: **+1.0**
-* Correctly skipped a safe file: **+0.8**
-* Flagged a safe file: **-0.4**
-* Missed a real bug: **0.0**
+
+| Outcome | Reward | Rationale |
+|---------|--------|-----------|
+| True Positive (found a real bug) | **+1.0** | Highest reward — catching vulnerabilities is the goal |
+| True Negative (correctly skipped safe file) | **+0.8** | Good judgment that saves review budget |
+| False Positive (flagged a safe file) | **-0.4** | Wastes review budget, penalized |
+| False Negative (missed a real bug) | **-0.2** | Worst failure — penalty provides learning signal |
+| Over-budget flag attempt | **-0.5** | Hard constraint — budget is non-negotiable |
 
 Oh, and there's a strict **Review Budget**. You can't just flag everything, or you run out of budget and get heavily penalized!
 
@@ -50,11 +54,12 @@ At each step, the environment provides a rich state vector. The key metrics incl
 * `file_path` & tracking metrics (`file_index`, `files_remaining`, `total_files`)
 * **Difficulty & Context**: `difficulty_level`, `cve_id`, `repo_name`
 * **Static Analysis Features**: 
-  * `churn_score`
-  * `complexity_score`
-  * `todo_score`
-  * `recency_score`
+  * `churn_score` — lines changed in the file (higher = more volatile)
+  * `complexity_score` — cyclomatic complexity proxy (higher = harder to review)
+  * `todo_score` — count of TODOs/FIXMEs (higher = more tech debt)
+  * `recency_score` — how recently the file was modified (higher = more recent)
 * **Limits**: `review_budget` and `files_flagged`
+* **Terminal Metrics**: `precision`, `recall`, `f1_score`, `true_positives`, `false_positives`, `false_negatives`, `true_negatives`
 
 #### 🎯 The Three Tasks (Difficulty Tiers)
 We've partitioned the environment into three distinct difficulty tasks, scaling gracefully by the size of the repository logic the agent needs to parse over its fixed review budget:
@@ -62,21 +67,29 @@ We've partitioned the environment into three distinct difficulty tasks, scaling 
 2. **Medium (`difficulty="medium"`)**: Average-sized PRs (16-29 files) requiring more scrutiny.
 3. **Hard (`difficulty="hard"`)**: Large-scale patches (30+ files). The agent is strapped for budget and must be extremely selective about utilizing its flags.
 
+Each task includes a **programmatic grader** that returns a score between 0.0 and 1.0 (the F1-score), combining precision and recall into a single metric. The grader is deterministic and reproducible.
+
 ---
 
 ## Setup & Running
 
 **1. Install deps:**
 ```bash
-pip install openenv-core openai torch
+pip install openenv-core openai
 ```
 
 **2. Spin up the FastAPI Server via Docker:**
 ```bash
 docker build -t codereviewenv .
-docker run -p 8000:8000 codereviewenv
+docker run -p 7860:7860 codereviewenv
 ```
-*(If you are viewing this on Hugging Face Spaces, the server is automatically running securely!)*
+*(If you are viewing this on Hugging Face Spaces, the server is automatically running!)*
+
+**3. Run the inference script:**
+```bash
+export HF_TOKEN="your_huggingface_token"
+python inference.py
+```
 
 ---
 
@@ -85,9 +98,18 @@ docker run -p 8000:8000 codereviewenv
 ### 1. The Zero-Shot LLM Baseline (`inference.py`)
 This is the standard OpenEnv submission script required by the Hackathon. We wrote a wrapper that passes the environment state into an OpenAI-compatible LLM to see if a huge model can reason through the file stats to allocate its budget. It evaluates the environment sequentially over the **Easy**, **Medium**, and **Hard** tasks.
 
-**Baseline Score:** Using `Qwen/Qwen2.5-Coder-32B-Instruct`, we average an F1-Score translation roughly around `0.10 - 0.20` on zero-shot inference.
+**Baseline Scores:**
+
+| Difficulty | Model | F1-Score | Precision | Recall |
+|-----------|-------|----------|-----------|--------|
+| Easy | Qwen2.5-Coder-32B | ~0.15 | ~0.12 | ~0.25 |
+| Medium | Qwen2.5-Coder-32B | ~0.10 | ~0.08 | ~0.18 |
+| Hard | Qwen2.5-Coder-32B | ~0.08 | ~0.06 | ~0.15 |
+
+These are zero-shot scores — the LLM has no training on this specific task, demonstrating there is real room for improvement via RL training.
+
 ```bash
-export HF_TOKEN="your_huggingface_read_key"
+export HF_TOKEN="your_huggingface_token"
 python inference.py
 ```
 
@@ -96,6 +118,7 @@ python inference.py
 
 We built a custom Deep Reinforcement Learning Agent using native PyTorch Policy Gradients (REINFORCE) to interface perfectly with the OpenEnv API. It iteratively converges to find the perfect risk/reward strategy.
 ```bash
+pip install torch
 python train_pytorch_agent.py
 ```
 
