@@ -69,14 +69,26 @@ class CodeReviewEnvironment(Environment):
         self._cum_reward = 0.0
         self._budget = 0
 
-    def reset(self, seed=None, episode_id=None, **kwargs) -> CodeReviewObservation:
+    def reset(self, seed=None, episode_id=None, difficulty=None, **kwargs) -> CodeReviewObservation:
         if seed is not None:
             random.seed(seed)
 
-        if BUGGY_EPISODES and random.random() < 0.7:
-            ep = random.choice(BUGGY_EPISODES)
+        difficulty = str(difficulty).lower() if difficulty else random.choice(["easy", "medium", "hard"])
+        if difficulty not in ["easy", "medium", "hard"]:
+            difficulty = random.choice(["easy", "medium", "hard"])
+
+        candidates = []
+        if difficulty == "easy":
+            candidates = [e for e in EPISODES if len(e["files"]) <= 15]
+        elif difficulty == "medium":
+            candidates = [e for e in EPISODES if 15 < len(e["files"]) < 30]
         else:
-            ep = random.choice(EPISODES)
+            candidates = [e for e in EPISODES if len(e["files"]) >= 30]
+
+        if not candidates:
+            candidates = EPISODES
+            
+        ep = random.choice(candidates)
 
         self._files = list(ep["files"])
         random.shuffle(self._files)
@@ -91,7 +103,7 @@ class CodeReviewEnvironment(Environment):
             step_count=0, cve_id=ep["cve_id"], repo_name=ep["repo"],
             total_files=len(self._files), total_bugs=ep["total_bugs"],
             current_file_index=0, files_flagged=0, correct_flags=0,
-            review_budget=self._budget,
+            review_budget=self._budget, difficulty_level=difficulty,
         )
 
         f = self._files[0]
@@ -99,6 +111,7 @@ class CodeReviewEnvironment(Environment):
         return CodeReviewObservation(
             done=False, reward=None,
             file_path=f["file"], file_index=0, total_files=len(self._files),
+            difficulty_level=difficulty,
             churn_score=float(feat[0]), complexity_score=float(feat[1]),
             todo_score=float(feat[2]), recency_score=float(feat[3]),
             cve_id=ep["cve_id"], cvss_score=float(ep["cvss"]), repo_name=ep["repo"],
@@ -115,6 +128,7 @@ class CodeReviewEnvironment(Environment):
                 message=f"bad action: {decision}",
                 file_path=self._files[self._idx]["file"],
                 file_index=self._idx, total_files=len(self._files),
+                difficulty_level=self._state.difficulty_level,
                 files_remaining=len(self._files) - self._idx - 1,
                 files_flagged=len(self._flagged), review_budget=self._budget,
             )
@@ -173,6 +187,7 @@ class CodeReviewEnvironment(Environment):
             return CodeReviewObservation(
                 done=True, reward=r, file_path="",
                 file_index=self._idx, total_files=len(self._files),
+                difficulty_level=self._state.difficulty_level,
                 files_remaining=0, files_flagged=len(self._flagged),
                 review_budget=self._budget,
                 cve_id=self._state.cve_id, cvss_score=0.0,
@@ -188,6 +203,7 @@ class CodeReviewEnvironment(Environment):
             done=False, reward=r,
             file_path=nxt["file"], file_index=self._idx,
             total_files=len(self._files),
+            difficulty_level=self._state.difficulty_level,
             churn_score=float(feat[0]), complexity_score=float(feat[1]),
             todo_score=float(feat[2]), recency_score=float(feat[3]),
             cve_id=self._state.cve_id, cvss_score=0.0,

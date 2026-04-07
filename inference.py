@@ -44,70 +44,76 @@ def main():
     
     env_url = os.environ.get("ENV_SERVER_URL", "http://127.0.0.1:8000")
     
-    rewards: List[float] = []
-    steps_taken = 0
-    success = False
+    tasks = ["easy", "medium", "hard"]
+    overall_scores = []
     
-    log_start(task=TASK_NAME, env=BENCHMARK, model=MODEL_NAME)
+    for task_difficulty in tasks:
+        rewards: List[float] = []
+        steps_taken = 0
+        success = False
+        
+        log_start(task=f"{TASK_NAME}_{task_difficulty}", env=BENCHMARK, model=MODEL_NAME)
 
-    try:
-        with CodeReviewEnv(base_url=env_url).sync() as env:
-            step_result = env.reset()
-            obs = step_result.observation
-            
-            while not step_result.done:
-                steps_taken += 1
-                budget_left = obs.review_budget - obs.files_flagged
-                prompt = (
-                    f"You are a code review assistant. Triaging file: {obs.file_path}\n"
-                    f"Metrics -> churn: {obs.churn_score}, complexity: {obs.complexity_score}, "
-                    f"todos: {obs.todo_score}, recency: {obs.recency_score}.\n"
-                    f"Flag budget remaining: {budget_left}.\n"
-                    f"Should we 'flag' or 'skip' this file? Answer exactly with 'flag' or 'skip'."
-                )
-                
-                decision = "skip"
-                error_msg = None
-                
-                try:
-                    res = client.chat.completions.create(
-                        model=MODEL_NAME,
-                        messages=[
-                            {"role": "system", "content": "You are a helpful code review assistant."},
-                            {"role": "user", "content": prompt}
-                        ],
-                        max_tokens=10,
-                        temperature=0.1
-                    )
-                    ans = res.choices[0].message.content.strip().lower()
-                    decision = "flag" if "flag" in ans else "skip"
-                except Exception as e:
-                    error_msg = str(e).replace('\n', ' ')
-
-                action = CodeReviewAction(decision=decision)
-                step_result = env.step(action)
+        try:
+            with CodeReviewEnv(base_url=env_url).sync() as env:
+                step_result = env.reset(difficulty=task_difficulty)
                 obs = step_result.observation
                 
-                reward = step_result.reward or 0.0
-                rewards.append(reward)
-                done = step_result.done
+                while not step_result.done:
+                    steps_taken += 1
+                    budget_left = obs.review_budget - obs.files_flagged
+                    prompt = (
+                        f"You are a code review assistant. Triaging file: {obs.file_path}\n"
+                        f"Metrics -> churn: {obs.churn_score}, complexity: {obs.complexity_score}, "
+                        f"todos: {obs.todo_score}, recency: {obs.recency_score}.\n"
+                        f"Flag budget remaining: {budget_left}.\n"
+                        f"Should we 'flag' or 'skip' this file? Answer exactly with 'flag' or 'skip'."
+                    )
+                    
+                    decision = "skip"
+                    error_msg = None
+                    
+                    try:
+                        res = client.chat.completions.create(
+                            model=MODEL_NAME,
+                            messages=[
+                                {"role": "system", "content": "You are a helpful code review assistant."},
+                                {"role": "user", "content": prompt}
+                            ],
+                            max_tokens=10,
+                            temperature=0.1
+                        )
+                        ans = res.choices[0].message.content.strip().lower()
+                        decision = "flag" if "flag" in ans else "skip"
+                    except Exception as e:
+                        error_msg = str(e).replace('\n', ' ')
+
+                    action = CodeReviewAction(decision=decision)
+                    step_result = env.step(action)
+                    obs = step_result.observation
+                    
+                    reward = step_result.reward or 0.0
+                    rewards.append(reward)
+                    done = step_result.done
+                    
+                    log_step(step=steps_taken, action=decision, reward=reward, done=done, error=error_msg)
                 
-                log_step(step=steps_taken, action=decision, reward=reward, done=done, error=error_msg)
-            
-            score = obs.f1_score if hasattr(obs, 'f1_score') else 0.0
-            
-            score = min(max(score, 0.0), 1.0)
-            
-            success = score > 0.0
+                score = obs.f1_score if hasattr(obs, 'f1_score') else 0.0
+                score = min(max(score, 0.0), 1.0)
+                success = score > 0.0
 
-    except Exception as e:
-        error_msg = str(e).replace('\n', ' ')
-        print(f"[DEBUG] Execution error: {error_msg}", file=sys.stderr)
-        score = 0.0
-        success = False
+        except Exception as e:
+            error_msg = str(e).replace('\n', ' ')
+            print(f"[DEBUG] Execution error: {error_msg}", file=sys.stderr)
+            score = 0.0
+            success = False
 
-    finally:
-        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+        finally:
+            overall_scores.append(score)
+            log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+            
+    avg_score = sum(overall_scores) / len(overall_scores)
+    print(f"\n[FINAL] Average Baseline Score across Easy, Medium, Hard tasks: {avg_score:.2f}")
 
 if __name__ == "__main__":
     main()

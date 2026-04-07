@@ -9,6 +9,7 @@ class CodeReviewObservation(Observation):
     file_path: str = ""
     file_index: int = 0
     total_files: int = 0
+    difficulty_level: str = "medium"
     churn_score: float = 0.0
     complexity_score: float = 0.0
     todo_score: float = 0.0
@@ -35,6 +36,7 @@ class CodeReviewState(State):
     total_files: int = 0
     total_bugs: int = 0
     current_file_index: int = 0
+    difficulty_level: str = "medium"
     files_flagged: int = 0
     correct_flags: int = 0
     review_budget: int = 0

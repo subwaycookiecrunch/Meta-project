@@ -49,8 +49,11 @@ def main():
     
     env = CodeReviewEnvironment()
     
+    import random
+    difficulties = ["easy", "medium", "hard"]
     for episode in range(num_episodes):
-        obs = env.reset()
+        difficulty = random.choice(difficulties)
+        obs = env.reset(difficulty=difficulty)
         
         saved_log_probs = []
         rewards = []
