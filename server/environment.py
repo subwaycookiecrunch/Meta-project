@@ -73,7 +73,7 @@ class CodeReviewEnvironment(Environment):
         if difficulty not in ["easy", "medium", "hard"]:
             difficulty = random.choice(["easy", "medium", "hard"])
 
-        # Filter by difficulty
+
         if difficulty == "easy":
             size_filter = lambda e: len(e["files"]) <= 15
         elif difficulty == "medium":
@@ -81,22 +81,19 @@ class CodeReviewEnvironment(Environment):
         else:
             size_filter = lambda e: len(e["files"]) >= 30
 
-        # Strongly prefer episodes that actually contain bugs —
-        # without bugs F1 is always 0.0 regardless of agent behavior,
-        # which would trip the "graders always return same score" disqualification.
+        # need episodes w/ bugs or f1 is stuck at 0
         buggy_candidates = [e for e in BUGGY_EPISODES if size_filter(e)]
         if buggy_candidates:
             ep = random.choice(buggy_candidates)
         else:
-            # Fallback: pick any episode matching size, then inject synthetic bugs
+            # fallback: any matching ep, add synthetic bugs if clean
             all_candidates = [e for e in EPISODES if size_filter(e)]
             if not all_candidates:
                 all_candidates = BUGGY_EPISODES if BUGGY_EPISODES else EPISODES
             ep = random.choice(all_candidates)
 
-            # If the chosen episode has no bugs, inject some
             if ep["total_bugs"] == 0:
-                ep = dict(ep)  # shallow copy to avoid mutating global
+                ep = dict(ep)
                 files = [dict(f) for f in ep["files"]]
                 n_inject = max(1, len(files) // 8)
                 targets = random.sample(range(len(files)), min(n_inject, len(files)))

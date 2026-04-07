@@ -12,7 +12,7 @@ def run_episode(env, agent_fn, name, episode=None):
     if episode:
         orig = random.choice
         random.choice = lambda x: episode
-        obs = env.reset()
+        obs = env.reset(difficulty="medium")
         random.choice = orig
     else:
         obs = env.reset()

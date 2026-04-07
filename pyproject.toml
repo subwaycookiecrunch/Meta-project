@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "code-review-env"
 version = "1.0.0"
-description = "RL environment for code vulnerability triage using real CVE data"
+description = "RL env for CVE triage on real vulnerability data"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
@@ -16,7 +16,14 @@ dependencies = [
     "fastapi>=0.100.0",
     "uvicorn>=0.20.0",
     "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+train = [
     "torch>=2.0.0",
+]
+inference = [
+    "openai>=1.0.0",
 ]
 
 [tool.setuptools.packages.find]

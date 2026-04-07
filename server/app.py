@@ -6,7 +6,7 @@ app = create_fastapi_app(CodeReviewEnvironment, CodeReviewAction, CodeReviewObse
 
 @app.get("/")
 def root():
-    return {"status": "success", "message": "CodeReviewEnv is active and ready for OpenEnv clients!"}
+    return {"status": "ok", "env": "code_review"}
 
 
 def main():

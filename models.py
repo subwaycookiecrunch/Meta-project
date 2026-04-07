@@ -40,3 +40,4 @@ class CodeReviewState(State):
     files_flagged: int = 0
     correct_flags: int = 0
     review_budget: int = 0
+    cumulative_reward: float = 0.0

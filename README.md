@@ -9,125 +9,118 @@ tags:
   - openenv
 ---
 
-# CodeReviewEnv: Triage CVEs Like a Pro
+# CodeReviewEnv
 
-*Built for the Meta/PyTorch OpenEnv Hackathon*
+An RL environment for vulnerability triage, built on real CVE data from the NVD.
 
-Hey! 👋 Welcome to **CodeReviewEnv**. 
+The idea: most RL envs are toy problems (gridworld, cartpole, etc). We wanted something closer to what devs actually deal with — triaging security patches across a codebase with limited time and attention.
 
-Most RL environments are toy setups like GridWorld or simple mazes. We wanted to tackle a real problem that we actually face as developers: **Vulnerability Triage**. 
+The agent gets a stream of files from a real CVE patch and has to decide: **flag** this file for human review, or **skip** it. There's a fixed review budget so you can't just flag everything.
 
-We built `CodeReviewEnv` using real-world data scraped directly from patches in the National Vulnerability Database (NVD). The agent connects to a repository, scans the files, and uses heuristics (like codebase churn, complexity, and recency) to decide whether to `flag` a file for manual security review or `skip` it and move on.
-
-* 🚀 **Hugging Face Space (Live Environment)**: [https://huggingface.co/spaces/lucid987654/code-review-env](https://huggingface.co/spaces/lucid987654/code-review-env)
-* 📁 **GitHub Repository**: [https://github.com/subwaycookiecrunch/Meta-project](https://github.com/subwaycookiecrunch/Meta-project)
+* **HF Space**: https://huggingface.co/spaces/lucid987654/code-review-env
+* **GitHub**: https://github.com/subwaycookiecrunch/Meta-project
 
 ---
 
-### The Problem
+### Data
 
-We have 1715 files across 65 authentic CVEs pulled directly from actual GitHub vulnerabilities. 
-We hit the agent with **Asymmetric Rewards**. In the real world, missing a critical bug (False Negative) is infinitely worse than accidentally flagging a safe file for review (False Positive). 
+1715 files across 65 CVEs scraped from actual GitHub vulnerability patches. Each file has four features extracted from the commit history: churn, complexity, TODO count, and recency.
 
-Our reward table forces the agent to balance its paranoia:
+### Rewards
 
-| Outcome | Reward | Rationale |
-|---------|--------|-----------|
-| True Positive (found a real bug) | **+1.0** | Highest reward — catching vulnerabilities is the goal |
-| True Negative (correctly skipped safe file) | **+0.8** | Good judgment that saves review budget |
-| False Positive (flagged a safe file) | **-0.4** | Wastes review budget, penalized |
-| False Negative (missed a real bug) | **-0.2** | Worst failure — penalty provides learning signal |
-| Over-budget flag attempt | **-0.5** | Hard constraint — budget is non-negotiable |
+Asymmetric on purpose — missing a real bug is worse than wasting a review slot on a clean file.
 
-Oh, and there's a strict **Review Budget**. You can't just flag everything, or you run out of budget and get heavily penalized!
+| Outcome | Reward | Why |
+|---------|--------|-----|
+| True Positive | +1.0 | found a real bug |
+| True Negative | +0.8 | correctly skipped clean file |
+| False Positive | -0.4 | wasted budget on safe file |
+| False Negative | -0.2 | missed a bug |
+| Over-budget flag | -0.5 | budget is a hard limit |
 
----
+### Tasks
 
-### 🧩 Environment Specifications
+Three difficulty levels based on repo size:
 
-#### Action Space
-The action space is a straightforward, string-based categorical action:
-* `decision`: `"flag"` or `"skip"`
+- **easy**: ≤15 files, generous budget
+- **medium**: 16-29 files
+- **hard**: 30+ files, tight budget — agent really has to pick its spots
 
-#### Observation Space
-At each step, the environment provides a rich state vector. The key metrics include:
-* `file_path` & tracking metrics (`file_index`, `files_remaining`, `total_files`)
-* **Difficulty & Context**: `difficulty_level`, `cve_id`, `repo_name`
-* **Static Analysis Features**: 
-  * `churn_score` — lines changed in the file (higher = more volatile)
-  * `complexity_score` — cyclomatic complexity proxy (higher = harder to review)
-  * `todo_score` — count of TODOs/FIXMEs (higher = more tech debt)
-  * `recency_score` — how recently the file was modified (higher = more recent)
-* **Limits**: `review_budget` and `files_flagged`
-* **Terminal Metrics**: `precision`, `recall`, `f1_score`, `true_positives`, `false_positives`, `false_negatives`, `true_negatives`
-
-#### 🎯 The Three Tasks (Difficulty Tiers)
-We've partitioned the environment into three distinct difficulty tasks, scaling gracefully by the size of the repository logic the agent needs to parse over its fixed review budget:
-1. **Easy (`difficulty="easy"`)**: Small repositories and pull requests (≤ 15 files). The budget is relatively forgiving.
-2. **Medium (`difficulty="medium"`)**: Average-sized PRs (16-29 files) requiring more scrutiny.
-3. **Hard (`difficulty="hard"`)**: Large-scale patches (30+ files). The agent is strapped for budget and must be extremely selective about utilizing its flags.
-
-Each task includes a **programmatic grader** that returns a score between 0.0 and 1.0 (the F1-score), combining precision and recall into a single metric. The grader is deterministic and reproducible.
+Grading is F1 score (precision × recall), always in [0, 1].
 
 ---
 
-## Setup & Running
+### Observation fields
 
-**1. Install deps:**
+Each step gives you:
+- `file_path`, `file_index`, `total_files`, `files_remaining`
+- `churn_score`, `complexity_score`, `todo_score`, `recency_score`
+- `review_budget`, `files_flagged`
+- `difficulty_level`, `cve_id`, `repo_name`
+- terminal: `precision`, `recall`, `f1_score`, `true_positives`, `false_positives`, etc.
+
+Action is just `{"decision": "flag"}` or `{"decision": "skip"}`.
+
+---
+
+## Running it
+
+**Install:**
 ```bash
 pip install openenv-core openai
 ```
 
-**2. Spin up the FastAPI Server via Docker:**
+**Docker:**
 ```bash
 docker build -t codereviewenv .
 docker run -p 7860:7860 codereviewenv
 ```
-*(If you are viewing this on Hugging Face Spaces, the server is automatically running!)*
 
-**3. Run the inference script:**
+**Inference:**
 ```bash
-export HF_TOKEN="your_huggingface_token"
+export HF_TOKEN="your_token"
 python inference.py
 ```
 
 ---
 
-## The Agents (We built two!)
+## Agents
 
-### 1. The Zero-Shot LLM Baseline (`inference.py`)
-This is the standard OpenEnv submission script required by the Hackathon. We wrote a wrapper that passes the environment state into an OpenAI-compatible LLM to see if a huge model can reason through the file stats to allocate its budget. It evaluates the environment sequentially over the **Easy**, **Medium**, and **Hard** tasks.
+### LLM baseline (`inference.py`)
 
-**Baseline Scores:**
+Sends the file stats to Qwen2.5-Coder-32B via the HF inference API and asks it to flag or skip. Runs all three difficulty levels.
 
-| Difficulty | Model | F1-Score | Precision | Recall |
-|-----------|-------|----------|-----------|--------|
-| Easy | Qwen2.5-Coder-32B | ~0.15 | ~0.12 | ~0.25 |
-| Medium | Qwen2.5-Coder-32B | ~0.10 | ~0.08 | ~0.18 |
-| Hard | Qwen2.5-Coder-32B | ~0.08 | ~0.06 | ~0.15 |
+Rough zero-shot numbers:
 
-These are zero-shot scores — the LLM has no training on this specific task, demonstrating there is real room for improvement via RL training.
+| Difficulty | F1 | Precision | Recall |
+|---|---|---|---|
+| Easy | ~0.15 | ~0.12 | ~0.25 |
+| Medium | ~0.10 | ~0.08 | ~0.18 |
+| Hard | ~0.08 | ~0.06 | ~0.15 |
+
+Lots of room to improve — the LLM has no training signal, it's just guessing from feature names.
 
 ```bash
-export HF_TOKEN="your_huggingface_token"
+export HF_TOKEN="your_token"
 python inference.py
 ```
 
-### 2. The Native PyTorch Agent (`train_pytorch_agent.py`)
-**Flex Warning.** LLMs are cool, but they struggle to implicitly understand strict mathematical bounds (like rationing a flag budget perfectly over exactly 29 files with precise asymmetric scoring). So, we went bare-metal.
+### PyTorch agent (`train_pytorch_agent.py`)
 
-We built a custom Deep Reinforcement Learning Agent using native PyTorch Policy Gradients (REINFORCE) to interface perfectly with the OpenEnv API. It iteratively converges to find the perfect risk/reward strategy.
+REINFORCE with a 3-layer MLP. Takes the 6 observation features as input, outputs flag/skip probabilities. Trains directly against the env reward signal.
+
 ```bash
 pip install torch
 python train_pytorch_agent.py
 ```
 
-## Hackathon Repo Tour
-* `Dockerfile` & `openenv.yaml`: The OpenEnv backend deployment wrappers
-* `inference.py`: The mandatory LLM endpoint validation script
-* `train_pytorch_agent.py`: Our custom PyTorch REINFORCE brain
-* `/models.py`: Pydantic Models for Actions & Observations
-* `/server/environment.py`: Where the magic reward mathematics happen
-* `/data/`: The actual scraped CVE GitHub dataset 
+## File layout
 
-*MIT License. Thanks for checking it out!*
+- `Dockerfile` + `openenv.yaml` — deployment config
+- `inference.py` — LLM baseline (hackathon submission script)
+- `train_pytorch_agent.py` — pytorch RL agent
+- `models.py` — pydantic action/observation/state types
+- `server/environment.py` — core env logic + reward math
+- `data/` — the CVE dataset
+
+MIT License

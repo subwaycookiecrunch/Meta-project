@@ -51,7 +51,9 @@ class CodeReviewEnv(EnvClient[CodeReviewAction, CodeReviewObservation, CodeRevie
             total_files=payload.get("total_files", 0),
             total_bugs=payload.get("total_bugs", 0),
             current_file_index=payload.get("current_file_index", 0),
+            difficulty_level=payload.get("difficulty_level", "medium"),
             files_flagged=payload.get("files_flagged", 0),
             correct_flags=payload.get("correct_flags", 0),
             review_budget=payload.get("review_budget", 0),
+            cumulative_reward=payload.get("cumulative_reward", 0.0),
         )

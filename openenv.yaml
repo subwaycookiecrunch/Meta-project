@@ -1,3 +1,8 @@
 name: code_review_env
 version: "1.0.0"
-description: RL env for code vulnerability triage using CVE data from NVD
+description: RL env for triaging CVE vulnerabilities in code repos
+entry_point: code_review_env.server.app:app
+tags:
+  - openenv
+  - security
+  - code-review

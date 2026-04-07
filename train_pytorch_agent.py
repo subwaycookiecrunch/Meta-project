@@ -45,7 +45,7 @@ def main():
     optimizer = optim.Adam(policy_net.parameters(), lr=learning_rate)
     
     num_episodes = 50
-    print(f"Initializing PyTorch REINFORCE Agent natively on CodeReviewEnv for {num_episodes} episodes...")
+    print(f"training for {num_episodes} episodes")
     
     env = CodeReviewEnvironment()
     
@@ -104,7 +104,7 @@ def main():
                   f"Reward: {sum(rewards):.1f} | "
                   f"F1: {obs.f1_score:.2f} (P: {obs.precision:.2f}, R: {obs.recall:.2f})")
             
-    print("\nTraining complete! PyTorch internal weights updated.")
+    print("\ndone.")
     
 if __name__ == "__main__":
     main()

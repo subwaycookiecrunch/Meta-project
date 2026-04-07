@@ -11,7 +11,6 @@ API_BASE_URL = os.getenv("API_BASE_URL", "https://api-inference.huggingface.co/v
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-Coder-32B-Instruct")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME", "codereviewenv")
 
-# HF_TOKEN is primary per sample inference.py, API_KEY as fallback
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
 
 if API_KEY is None:
