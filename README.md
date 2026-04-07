@@ -7,89 +7,63 @@ sdk: docker
 pinned: false
 ---
 
-# CodeReviewEnv
+# 🛡️ CodeReviewEnv: Triage CVEs Like a Pro
 
-RL environment for training agents to triage code files for vulnerabilities. Built on top of OpenEnv (Meta/PyTorch).
+*Built for the Meta/PyTorch OpenEnv Hackathon* 🚀
 
-Uses real labeled data from NVD - 1715 file samples across 65 CVEs. The agent reviews files from a repo and has to figure out which ones are actually buggy based on features like churn, complexity, TODO count, and recency.
+Most RL environments are toy setups like GridWorld. We wanted to tackle a real problem: **Vulnerability Triage**. 
 
-## How it works
+We built `CodeReviewEnv` using real-world data from the National Vulnerability Database (NVD). The agent connects to a repository, scans the files, and uses heuristics (like codebase churn, complexity, and recency) to decide whether to `flag` a file for manual security review or `skip` it.
 
-Each episode loads files from a real CVE-affected codebase. The agent goes through files one by one and decides `flag` or `skip`. At the end it gets scored on precision/recall/f1.
+### The Problem
+We have 1715 files across 65 CVEs pulled directly from actual GitHub patches. 
+We hit the agent with **Asymmetric Rewards**. In the real world, missing a critical bug (False Negative) is infinitely worse than accidentally flagging a safe file (False Positive). 
 
-Rewards are intentionally asymmetric - missing a real bug hurts way more than flagging a false positive, because thats how it works in practice.
+Our reward table forces the agent to balance its paranoia:
+- **Found a bug:** +1.0
+- **Correctly skipped a safe file:** +0.8
+- **Flagged a safe file:** +0.4
+- **Missed a real bug:** 0.0
 
-| outcome | reward |
-|---------|--------|
-| correctly flag a bug | 1.0 |
-| correctly skip safe file | 0.8 |
-| flag a safe file | 0.4 |
-| miss a real bug | 0.0 |
+Oh, and there's a strict **Review Budget**. You can't just flag everything, or you run out of budget. 
 
-The agent also has a limited flag budget per episode so it can't just flag everything.
+## 🛠️ Setup & Running
 
-## Setup
-
+**1. Install deps:**
 ```bash
-pip install openenv-core openai
+pip install openenv-core openai torch
 ```
 
-To run the server locally:
+**2. Spin up the FastAPI Server:**
 ```bash
 docker build -t codereviewenv .
 docker run -p 8000:8000 codereviewenv
 ```
+*(If you are viewing this on Hugging Face Spaces, the server is automatically running securely!)*
 
-## Client usage
+## 🤖 The Agents (We built two!)
 
-To run the baseline evaluation script using an LLM:
+### 1. The Zero-Shot LLM Baseline (`inference.py`)
+This is the standard OpenEnv submission script required by the Hackathon. We wrote a wrapper that passes the environment state into any OpenAI-compatible LLM to see if a huge model can reason through the file stats to allocate its budget.
 ```bash
-export HF_TOKEN="your_token"
+export HF_TOKEN="your_huggingface_write_key"
 python inference.py
 ```
 
-### PyTorch Reinforcement Learning Agent
-Since LLMs often struggle natively with our asymmetric reward mechanism (scoring 0.00 F1 on zero-shot baselines), we've implemented a native **PyTorch Deep Reinforcement Learning Agent** using Policy Gradients (REINFORCE). 
+### 2. The Native PyTorch Agent (`train_pytorch_agent.py`)
+**Flex Warning.** LLMs are cool, but they completely suck at understanding strict mathematical bounds (like rationing a flag budget over exactly 65 files with precise asymmetric scoring). So, we went bare-metal.
 
-The agent learns to allocate its flag budget optimally across the codebase by backpropagating on the OpenEnv step rewards:
+We built a custom Deep Reinforcement Learning Agent using native PyTorch Policy Gradients (REINFORCE) to interface perfectly with the OpenEnv API. It iteratively converges to find the perfect risk/reward strategy.
 ```bash
 python train_pytorch_agent.py
 ```
 
-## Observation fields
+## 📁 Hackathon Repo Tour
 
-- `file_path` - current file being reviewed
-- `churn_score` / `complexity_score` / `todo_score` / `recency_score` - features (0-100)
-- `review_budget` - how many flags left
-- `files_remaining` - files left in episode
-- `cve_id` / `cvss_score` - which vulnerability this episode is about
+- `Dockerfile` & `openenv.yaml` - The OpenEnv backend deployment wrappers
+- `inference.py` - The mandatory LLM endpoint validation script
+- `train_pytorch_agent.py` - Our custom PyTorch REINFORCE brain
+- `/server/environment.py` - Where the magic reward mathematics happen
+- `/data/` - The actual scraped CVE GitHub dataset 
 
-## Data
-
-The training data comes from DeathClock's CVE pipeline:
-1. Pull CVEs from NVD API with GitHub refs
-2. Fetch file metadata and commit history from those repos
-3. Compute feature scores for each file
-4. Label files based on which ones were actually patched in the CVE fix
-
-65 CVEs, 1715 files total. 12 confirmed buggy files across 7 episodes - rest are negative examples that the agent needs to learn to skip.
-
-## Files
-
-```
-code_review_env/
-├── Dockerfile         - project root dockerfile (for openenv)
-├── inference.py       - generic llm evaluator script
-├── train_pytorch_agent.py - native PyTorch DRL training loop
-├── models.py          - action/observation/state types
-├── client.py          - websocket client
-├── demo.py            - runs baseline agents locally without docker
-├── data/              - cve training data (json)
-└── server/
-    ├── environment.py - core env logic
-    └── app.py         - fastapi server
-```
-
-## License
-
-MIT
+MIT License. Thanks for checking it out! ✌️
