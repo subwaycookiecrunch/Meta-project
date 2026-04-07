@@ -1,0 +1,90 @@
+Metadata-Version: 2.4
+Name: code-review-env
+Version: 1.0.0
+Summary: RL environment for code vulnerability triage using real CVE data
+Author: Raj Bisaria
+License: MIT
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: openenv-core>=0.2.0
+Requires-Dist: fastapi>=0.100.0
+Requires-Dist: uvicorn>=0.20.0
+Requires-Dist: pydantic>=2.0.0
+
+# CodeReviewEnv
+
+RL environment for training agents to triage code files for vulnerabilities. Built on top of OpenEnv (Meta/PyTorch).
+
+Uses real labeled data from NVD - 1715 file samples across 65 CVEs. The agent reviews files from a repo and has to figure out which ones are actually buggy based on features like churn, complexity, TODO count, and recency.
+
+## How it works
+
+Each episode loads files from a real CVE-affected codebase. The agent goes through files one by one and decides `flag` or `skip`. At the end it gets scored on precision/recall/f1.
+
+Rewards are intentionally asymmetric - missing a real bug hurts way more than flagging a false positive, because thats how it works in practice.
+
+| outcome | reward |
+|---------|--------|
+| correctly flag a bug | 1.0 |
+| correctly skip safe file | 0.8 |
+| flag a safe file | 0.4 |
+| miss a real bug | 0.0 |
+
+The agent also has a limited flag budget per episode so it can't just flag everything.
+
+## Setup
+
+```bash
+pip install openenv-core openai
+```
+
+To run the server locally:
+```bash
+docker build -t codereviewenv .
+docker run -p 8000:8000 codereviewenv
+```
+
+## Client usage
+
+To run the evaluation script:
+```bash
+export HF_TOKEN="your_hugging_face_token"
+python inference.py
+```
+
+## Observation fields
+
+- `file_path` - current file being reviewed
+- `churn_score` / `complexity_score` / `todo_score` / `recency_score` - features (0-100)
+- `review_budget` - how many flags left
+- `files_remaining` - files left in episode
+- `cve_id` / `cvss_score` - which vulnerability this episode is about
+
+## Data
+
+The training data comes from DeathClock's CVE pipeline:
+1. Pull CVEs from NVD API with GitHub refs
+2. Fetch file metadata and commit history from those repos
+3. Compute feature scores for each file
+4. Label files based on which ones were actually patched in the CVE fix
+
+65 CVEs, 1715 files total. 12 confirmed buggy files across 7 episodes - rest are negative examples that the agent needs to learn to skip.
+
+## Files
+
+```
+code_review_env/
+├── Dockerfile         - project root dockerfile (for openenv)
+├── inference.py       - generic evaluator script
+├── models.py          - action/observation/state types
+├── client.py          - websocket client
+├── demo.py            - runs baseline agents locally without docker
+├── data/              - cve training data (json)
+└── server/
+    ├── environment.py - core env logic
+    └── app.py         - fastapi server
+```
+
+## License
+
+MIT

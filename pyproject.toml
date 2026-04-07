@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "code-review-env"
+version = "1.0.0"
+description = "RL environment for code vulnerability triage using real CVE data"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Raj Bisaria"}]
+
+dependencies = [
+    "openenv-core>=0.2.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+    "pydantic>=2.0.0",
+    "torch>=2.0.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["code_review_env*"]
+
+[tool.setuptools.package-data]
+code_review_env = ["data/*.json"]
+
+[project.scripts]
+server = "code_review_env.server.app:main"
