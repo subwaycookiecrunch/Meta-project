@@ -1,3 +1,12 @@
+---
+title: CodeReviewEnv
+emoji: 🛡️
+colorFrom: yellow
+colorTo: red
+sdk: docker
+pinned: false
+---
+
 # CodeReviewEnv
 
 RL environment for training agents to triage code files for vulnerabilities. Built on top of OpenEnv (Meta/PyTorch).
