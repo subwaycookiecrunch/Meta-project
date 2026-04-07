@@ -5,5 +5,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 ENV PYTHONPATH=/
 ENV PYTHONIOENCODING=utf-8
-EXPOSE 8000
-CMD ["python", "-m", "uvicorn", "code_review_env.server.app:app", "--host", "0.0.0.0", "--port", "8000"]
+EXPOSE 7860
+CMD ["python", "-m", "uvicorn", "code_review_env.server.app:app", "--host", "0.0.0.0", "--port", "7860"]
