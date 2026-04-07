@@ -4,6 +4,10 @@ from code_review_env.models import CodeReviewAction, CodeReviewObservation
 
 app = create_fastapi_app(CodeReviewEnvironment, CodeReviewAction, CodeReviewObservation)
 
+@app.get("/")
+def root():
+    return {"status": "success", "message": "CodeReviewEnv is active and ready for OpenEnv clients!"}
+
 
 def main():
     import uvicorn
