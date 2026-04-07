@@ -5,6 +5,8 @@ colorFrom: yellow
 colorTo: red
 sdk: docker
 pinned: false
+tags:
+  - openenv
 ---
 
 # CodeReviewEnv: Triage CVEs Like a Pro
