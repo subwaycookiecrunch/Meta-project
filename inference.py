@@ -7,11 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from openai import OpenAI
 from code_review_env import CodeReviewEnv, CodeReviewAction
 
-_raw_api_base = os.environ.get("API_BASE_URL")
-if _raw_api_base and "8000" in _raw_api_base:
-    API_BASE_URL = "https://router.huggingface.co/v1"
-else:
-    API_BASE_URL = _raw_api_base or "https://router.huggingface.co/v1"
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
 
 MODEL_NAME = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-Coder-32B-Instruct")
 HF_TOKEN = os.environ.get("HF_TOKEN", os.environ.get("API_KEY"))
@@ -31,9 +27,9 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
         flush=True,
     )
 
-def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+def log_end(success: bool, steps: int, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}", flush=True)
+    print(f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}", flush=True)
 
 def main():
     if not HF_TOKEN:
@@ -110,10 +106,7 @@ def main():
 
         finally:
             overall_scores.append(score)
-            log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
-            
-    avg_score = sum(overall_scores) / len(overall_scores)
-    print(f"\n[FINAL] Average Baseline Score across Easy, Medium, Hard tasks: {avg_score:.2f}")
+            log_end(success=success, steps=steps_taken, rewards=rewards)
 
 if __name__ == "__main__":
     main()
