@@ -11,7 +11,6 @@ API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
 
 HF_TOKEN = os.getenv("HF_TOKEN")
-
 if HF_TOKEN is None:
     raise ValueError("HF_TOKEN environment variable is required")
 
@@ -37,21 +36,22 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
     )
 
 
-def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+def log_end(success: bool, steps: int, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
+    print(
+        f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}",
+        flush=True,
+    )
 
 
 def main():
     env_url = os.getenv("ENV_SERVER_URL", "http://127.0.0.1:8000")
-
     tasks = ["easy", "medium", "hard"]
 
     for task_difficulty in tasks:
         rewards: List[float] = []
         steps_taken = 0
         success = False
-        score = 0.0
 
         log_start(task=f"{TASK_NAME}_{task_difficulty}", env=BENCHMARK, model=MODEL_NAME)
 
@@ -95,23 +95,25 @@ def main():
 
                     reward = step_result.reward or 0.0
                     rewards.append(reward)
-                    done = step_result.done
 
-                    log_step(step=steps_taken, action=decision, reward=reward, done=done, error=error_msg)
+                    log_step(
+                        step=steps_taken,
+                        action=decision,
+                        reward=reward,
+                        done=step_result.done,
+                        error=error_msg,
+                    )
 
                 score = obs.f1_score if hasattr(obs, "f1_score") else 0.0
-                score = min(max(score, 0.0), 1.0)
                 success = score > 0.0
 
         except Exception as e:
             print(f"execution error: {e}", file=sys.stderr)
-            score = 0.0
             success = False
 
         finally:
-            log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+            log_end(success=success, steps=steps_taken, rewards=rewards)
 
 
 if __name__ == "__main__":
     main()
-
