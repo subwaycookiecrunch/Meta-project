@@ -2,15 +2,17 @@ import os
 import sys
 from typing import List, Optional
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from openai import OpenAI
 from code_review_env import CodeReviewEnv, CodeReviewAction
 
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
 
-HF_TOKEN = os.getenv("HF_TOKEN")
-if HF_TOKEN is None:
-    raise ValueError("HF_TOKEN environment variable is required")
+HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
+if not HF_TOKEN:
+    raise ValueError("HF_TOKEN or API_KEY environment variable is required")
 
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
@@ -44,7 +46,7 @@ def parse_decision(text: str) -> str:
 
 
 def main():
-    env_url = os.getenv("ENV_SERVER_URL", "http://127.0.0.1:8000")
+    env_url = os.getenv("ENV_SERVER_URL", "http://127.0.0.1:7860")
     task_difficulty = "easy"
 
     rewards: List[float] = []
