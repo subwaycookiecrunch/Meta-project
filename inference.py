@@ -10,14 +10,14 @@ from code_review_env import CodeReviewEnv, CodeReviewAction
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4.1-mini")
 
-API_KEY = os.getenv("API_KEY") or os.getenv("HF_TOKEN")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
-if API_KEY is None:
-    raise ValueError("API_KEY or HF_TOKEN environment variable is required")
+if HF_TOKEN is None:
+    raise ValueError("HF_TOKEN environment variable is required")
 
 client = OpenAI(
     base_url=API_BASE_URL,
-    api_key=API_KEY,
+    api_key=HF_TOKEN,
 )
 
 TASK_NAME = "code_review"
