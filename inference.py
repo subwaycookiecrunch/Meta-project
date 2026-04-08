@@ -32,12 +32,20 @@ def log_step(step: int, action: str, reward: float, done: bool, error: Optional[
     )
 
 
-def log_end(success: bool, steps: int, rewards: List[float]) -> None:
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(
-        f"[END] success={str(success).lower()} steps={steps} rewards={rewards_str}",
+        f"[END] success={str(success).lower()} steps={steps} score={score:.4f} rewards={rewards_str}",
         flush=True,
     )
+
+
+def clamp_score(raw: float) -> float:
+    if raw <= 0.0:
+        return 0.01
+    if raw >= 1.0:
+        return 0.99
+    return raw
 
 
 def parse_decision(text: str) -> str:
@@ -45,19 +53,17 @@ def parse_decision(text: str) -> str:
     return "flag" if text == "flag" else "skip"
 
 
-def main():
-    env_url = os.getenv("ENV_SERVER_URL", "http://127.0.0.1:7860")
-    task_difficulty = "easy"
-
+def run_task(env_url: str, difficulty: str) -> None:
     rewards: List[float] = []
     steps_taken = 0
     success = False
+    score = 0.01
 
-    log_start(task=f"{TASK_NAME}_{task_difficulty}", env=BENCHMARK, model=MODEL_NAME)
+    log_start(task=f"{TASK_NAME}_{difficulty}", env=BENCHMARK, model=MODEL_NAME)
 
     try:
         with CodeReviewEnv(base_url=env_url).sync() as env:
-            step_result = env.reset(difficulty=task_difficulty)
+            step_result = env.reset(difficulty=difficulty)
             obs = step_result.observation
 
             while not step_result.done:
@@ -107,14 +113,24 @@ def main():
                     error=error_msg,
                 )
 
-            success = bool(getattr(obs, "f1_score", 0.0) > 0.0)
+            raw_score = getattr(obs, "f1_score", 0.0) or 0.0
+            score = clamp_score(raw_score)
+            success = raw_score > 0.0
 
     except Exception as e:
         print(str(e).replace("\n", " "), file=sys.stderr, flush=True)
+        score = 0.01
         success = False
 
     finally:
-        log_end(success=success, steps=steps_taken, rewards=rewards)
+        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
+
+
+def main():
+    env_url = os.getenv("ENV_SERVER_URL", "http://127.0.0.1:7860")
+
+    for difficulty in ["easy", "medium", "hard"]:
+        run_task(env_url, difficulty)
 
 
 if __name__ == "__main__":
