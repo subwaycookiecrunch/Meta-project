@@ -7,14 +7,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from openai import OpenAI
 from code_review_env import CodeReviewEnv, CodeReviewAction
 
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api-inference.huggingface.co/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-Coder-32B-Instruct")
-LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME", "codereviewenv")
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://api-inference.huggingface.co/v1")
+MODEL_NAME = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-Coder-32B-Instruct")
+LOCAL_IMAGE_NAME = os.environ.get("LOCAL_IMAGE_NAME", "codereviewenv")
 
-API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
+# proxy key takes priority — the hackathon runner injects API_KEY + API_BASE_URL
+API_KEY = os.environ.get("API_KEY") or os.environ.get("HF_TOKEN")
 
 if API_KEY is None:
-    raise ValueError("HF_TOKEN or API_KEY environment variable is required")
+    raise ValueError("Set API_KEY (proxy) or HF_TOKEN to run inference")
 
 client = OpenAI(
     base_url=API_BASE_URL,
