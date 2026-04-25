@@ -137,12 +137,13 @@ training:
   precision: bfloat16 (4-bit quantized base + bf16 LoRA)
   lora_rank: 16
   lora_alpha: 32
-  num_episodes: 300         # v2: was 200
-  num_train_epochs: 2       # v2: was 1 → ~150 optimizer steps
-  learning_rate: 5e-7       # v2: was 1e-6
-  warmup_ratio: 0.10        # v2: was 0.05
-  grpo_beta: 0.02           # KL coefficient
-  max_completion_length: 1280  # v2: was 1024 (room for predictions + thinking)
+  num_episodes: 300            # v2: was 200
+  num_train_epochs: 2          # v2: was 1 → ~75 optimizer steps
+  learning_rate: 5e-7          # v2: was 1e-6
+  warmup_ratio: 0.10           # v2: was 0.05
+  grpo_beta: 0.02              # KL coefficient
+  max_seq_length: 2048         # v1 value — Space memory cap
+  max_completion_length: 1024  # v1 value — Space memory cap
   metacognitive_reward_weight: 0.30
   live_environment_execution: true
   notes: |

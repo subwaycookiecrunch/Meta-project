@@ -115,7 +115,7 @@ Training updates (train_grpo.py v2)
     num_train_epochs 1 -> 2  (~150 optimizer steps vs 50)
     LEARNING_RATE  1e-6 -> 5e-7
     WARMUP_RATIO   0.05 -> 0.10
-    MAX_COMPLETION_LENGTH 1024 -> 1280
+    MAX_COMPLETION_LENGTH unchanged at 1024 (Space 14GiB cap)
     GRPO beta      default -> 0.02 (allows wider exploration)
 
 App & narrative (app.py, README, blog, openenv.yaml, VIDEO_SCRIPT)

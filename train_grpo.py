@@ -39,27 +39,32 @@ MODEL_NAME = "Qwen/Qwen3-8B"
 OUTPUT_DIR = "./grpo_output"
 CHECKPOINT_DIR = os.path.join(OUTPUT_DIR, "checkpoints")
 
-# Training hyperparameters (tuned for 8B on A10G/A100, v2 — metacognitive)
-# v2 changes vs v1 ("flat curve over 50 steps" run):
-#   NUM_EPISODES   200 → 300   (more diverse rollouts)
-#   num_train_epochs 1 → 2      (gives ~150 optimizer steps vs 50)
-#   LEARNING_RATE  1e-6 → 5e-7  (halved — v1 showed late-mean below early-mean)
-#   WARMUP_RATIO   0.05 → 0.10  (longer warmup damps early instability)
-#   MAX_COMPLETION_LENGTH 1024 → 1280  (room for budget predictions + thinking)
-#   GRPO beta      default → 0.02      (lower KL allows wider exploration)
+# Training hyperparameters (tuned for 8B on the HF Space — 14 GiB cap).
+# v2.1 changes vs v1 ("flat curve over 50 steps" run):
+#   NUM_EPISODES      200 → 300   (more diverse rollouts; CPU-only impact)
+#   num_train_epochs  1   → 2     (more optimizer steps per episode)
+#   LEARNING_RATE     1e-6 → 5e-7 (halved — v1 showed late-mean below early-mean)
+#   WARMUP_RATIO      0.05 → 0.10 (longer warmup damps early instability)
+#   GRPO beta         default → 0.02 (lower KL allows wider exploration)
+#   METACOG_ENABLED   true (the v2 contribution — calibrated metacog reward)
+# Notes:
+#   v2.0 also bumped MAX_SEQ_LENGTH 2048→2304 and MAX_COMPLETION_LENGTH
+#   1024→1280, but this OOM'd the Space at the first forward pass
+#   ("Memory limit exceeded (14Gi)").  Reverted both to v1 values; the
+#   metacog addendum (~50 extra completion tokens) still fits in 1024.
 NUM_EPISODES = 300
-NUM_GENERATIONS = 2          # 8B in 24 GB VRAM
-MAX_COMPLETION_LENGTH = 1280 # +256 for <budget_prediction> + extra <think>
+NUM_GENERATIONS = 2          # 8B in ≤14 GB Space RAM
+MAX_COMPLETION_LENGTH = 1024 # v1 value — fits within Space memory cap
 BATCH_SIZE = 1
 GRAD_ACCUM_STEPS = 8         # effective batch = 1 * 8 = 8
 LEARNING_RATE = 5e-7         # halved from v1 for stability
 WARMUP_RATIO = 0.10          # was 0.05
-NUM_TRAIN_EPOCHS = 2         # was 1 → 1: ~150 steps total
+NUM_TRAIN_EPOCHS = 2         # was 1 → 2: ~75 optimizer steps over 300 episodes
 GRPO_BETA = 0.02             # KL coefficient — lower allows more exploration
-MAX_SEQ_LENGTH = 2304        # +256 for the longer completion
+MAX_SEQ_LENGTH = 2048        # v1 value — fits within Space memory cap
 LORA_R = 16
 LORA_ALPHA = 32
-SAVE_EVERY = 50
+SAVE_EVERY = 25              # smaller checkpoint cadence for safety
 USE_UNSLOTH = os.environ.get("USE_UNSLOTH", "true").lower() == "true"
 
 # Metacognitive reward — the v2 contribution.  When True, the system prompt
