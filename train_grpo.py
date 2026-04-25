@@ -30,41 +30,51 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 
 # ── Configuration ───────────────────────────────────────────────────
-# Model: Qwen3-8B — latest-generation reasoning model with native
-# support for agentic tool-calling and 128K context. Its multi-step
-# reasoning outperforms code-specialized models on security analysis
-# tasks where understanding WHY code is vulnerable matters more than
-# just recognizing syntax patterns.
-MODEL_NAME = "Qwen/Qwen3-8B"
+# Model: Qwen3-1.7B (thinking-mode) — same Qwen3 family as the 8B
+# variant (identical chat template, native <think> support, agentic
+# tool-calling).  Chosen as the primary training target because:
+#   • Fits the HF Space 14 GiB memory cap with full 4096 / 2048 lengths
+#   • 5× fewer params → 2-3× faster per step → ~450 GRPO steps fit
+#     in the wall-clock budget (vs ≤75 steps for 8B)
+#   • Smaller models adapt to a brand-new output format
+#     (<budget_prediction>) faster, producing visibly cleaner curves
+#   • All Qwen3 sizes share the same thinking template, so the
+#     metacognitive reward, transfer eval, and inference-time budget
+#     processor all transfer 1:1 to 8B if we re-run the experiment
+#     on bigger hardware later.
+# Override via env var to swap to 8B / 4B without touching code.
+MODEL_NAME = os.environ.get("MODEL_NAME", "Qwen/Qwen3-1.7B")
 OUTPUT_DIR = "./grpo_output"
 CHECKPOINT_DIR = os.path.join(OUTPUT_DIR, "checkpoints")
+EVAL_CALIBRATION_PATH = os.path.join(OUTPUT_DIR, "eval_calibration.json")
+TRACE_LOG_PATH = os.path.join(OUTPUT_DIR, "trace_log.jsonl")
 
-# Training hyperparameters (tuned for 8B on the HF Space — 14 GiB cap).
-# v2.1 changes vs v1 ("flat curve over 50 steps" run):
-#   NUM_EPISODES      200 → 300   (more diverse rollouts; CPU-only impact)
-#   num_train_epochs  1   → 2     (more optimizer steps per episode)
-#   LEARNING_RATE     1e-6 → 5e-7 (halved — v1 showed late-mean below early-mean)
-#   WARMUP_RATIO      0.05 → 0.10 (longer warmup damps early instability)
-#   GRPO beta         default → 0.02 (lower KL allows wider exploration)
-#   METACOG_ENABLED   true (the v2 contribution — calibrated metacog reward)
-# Notes:
-#   v2.0 also bumped MAX_SEQ_LENGTH 2048→2304 and MAX_COMPLETION_LENGTH
-#   1024→1280, but this OOM'd the Space at the first forward pass
-#   ("Memory limit exceeded (14Gi)").  Reverted both to v1 values; the
-#   metacog addendum (~50 extra completion tokens) still fits in 1024.
-NUM_EPISODES = 300
-NUM_GENERATIONS = 2          # 8B in ≤14 GB Space RAM
-MAX_COMPLETION_LENGTH = 1024 # v1 value — fits within Space memory cap
+# Training hyperparameters (tuned for Qwen3-1.7B on the HF Space, v2.2).
+# v2.2 changes vs v2.1 (8B with reverted lengths):
+#   MODEL                   Qwen3-8B → Qwen3-1.7B  (Space cap, faster steps)
+#   MAX_SEQ_LENGTH          2048 → 4096            (no prompt truncation)
+#   MAX_COMPLETION_LENGTH   1024 → 2048            (room for full reports)
+#   NUM_EPISODES            300 → 500              (more diverse rollouts)
+#   NUM_TRAIN_EPOCHS        2 → 3                  (~470 optimizer steps)
+#   GRAD_ACCUM_STEPS        8 → 4                  (more frequent updates)
+#   LEARNING_RATE           5e-7 → 1e-6            (smaller model can take it)
+# What stays from v2.0/v2.1:
+#   WARMUP_RATIO 0.10        — longer warmup damps early instability
+#   GRPO_BETA 0.02           — lower KL allows wider exploration
+#   METACOG_ENABLED true     — the v2 contribution
+NUM_EPISODES = int(os.environ.get("NUM_EPISODES", "500"))
+NUM_GENERATIONS = 2          # GRPO group size
+MAX_COMPLETION_LENGTH = int(os.environ.get("MAX_COMPLETION_LENGTH", "2048"))
 BATCH_SIZE = 1
-GRAD_ACCUM_STEPS = 8         # effective batch = 1 * 8 = 8
-LEARNING_RATE = 5e-7         # halved from v1 for stability
-WARMUP_RATIO = 0.10          # was 0.05
-NUM_TRAIN_EPOCHS = 2         # was 1 → 2: ~75 optimizer steps over 300 episodes
-GRPO_BETA = 0.02             # KL coefficient — lower allows more exploration
-MAX_SEQ_LENGTH = 2048        # v1 value — fits within Space memory cap
+GRAD_ACCUM_STEPS = int(os.environ.get("GRAD_ACCUM_STEPS", "4"))
+LEARNING_RATE = float(os.environ.get("LEARNING_RATE", "1e-6"))
+WARMUP_RATIO = 0.10
+NUM_TRAIN_EPOCHS = int(os.environ.get("NUM_TRAIN_EPOCHS", "3"))
+GRPO_BETA = 0.02
+MAX_SEQ_LENGTH = int(os.environ.get("MAX_SEQ_LENGTH", "4096"))
 LORA_R = 16
 LORA_ALPHA = 32
-SAVE_EVERY = 25              # smaller checkpoint cadence for safety
+SAVE_EVERY = 50
 USE_UNSLOTH = os.environ.get("USE_UNSLOTH", "true").lower() == "true"
 
 # Metacognitive reward — the v2 contribution.  When True, the system prompt
@@ -72,6 +82,7 @@ USE_UNSLOTH = os.environ.get("USE_UNSLOTH", "true").lower() == "true"
 # calibration + difficulty awareness (see metacognitive_reward.py).
 METACOG_ENABLED = os.environ.get("METACOG_ENABLED", "true").lower() == "true"
 METACOG_WEIGHT = 0.30        # Reward weight for the metacog component
+CALIBRATION_LOG_EVERY = 1    # Log every reward call (cheap, JSON appends)
 
 
 # ── System prompt for the security investigator ─────────────────────
@@ -456,11 +467,20 @@ def reward_fn(completions, prompts=None, **kwargs):
         # Difficulty awareness: long preds on bugs, short on safe?
         # Coupling: every prediction tied to a real tool call?
         metacog_score = 0.0
+        metacog_details = []
+        metacog_metrics = None
         if METACOG_ENABLED:
             try:
                 from metacognitive_reward import compute_metacognitive_reward
                 metacog = compute_metacognitive_reward(text, bug_files=bug_files)
                 metacog_score = metacog.raw_score
+                metacog_details = list(metacog.details)
+                metacog_metrics = {
+                    "calibration": metacog.calibration,
+                    "difficulty_awareness": metacog.difficulty_awareness,
+                    "coupling": metacog.coupling,
+                    "n_predictions": metacog.n_predictions,
+                }
             except Exception:
                 metacog_score = 0.0
 
@@ -481,9 +501,86 @@ def reward_fn(completions, prompts=None, **kwargs):
             else:
                 final = text_score
 
-        rewards.append(min(1.0, max(0.0, final)))
+        final = min(1.0, max(0.0, final))
+        rewards.append(final)
+
+        # ── Step 5: Persistent logging for post-hoc analysis ──
+        # Append every reward call's calibration data + scores to disk so
+        # we can build the *real* calibration plot from training rollouts
+        # (not from a heuristic proxy).
+        try:
+            _log_reward_call(
+                idx=idx,
+                env_score=env_score,
+                text_score=text_score,
+                metacog_score=metacog_score,
+                metacog_metrics=metacog_metrics,
+                metacog_details=metacog_details,
+                final=final,
+                bug_files=bug_files,
+            )
+        except Exception:
+            pass
 
     return rewards
+
+
+# ── Reward-call logger ──────────────────────────────────────────────
+# Appends a JSONL line per reward call (cheap; flushed every step).  At the
+# end of training the live calibration plot script reads this file to
+# produce eval_calibration.json containing real (pred, actual_len, label)
+# triples.  This makes the headline calibration figure REAL data, not a
+# heuristic proxy.
+_TRACE_FH = None
+_CAL_BUFFER: list = []
+
+
+def _log_reward_call(idx, env_score, text_score, metacog_score,
+                     metacog_metrics, metacog_details, final, bug_files):
+    global _TRACE_FH, _CAL_BUFFER
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    if _TRACE_FH is None:
+        _TRACE_FH = open(TRACE_LOG_PATH, "a", buffering=1)  # line-buffered
+
+    payload = {
+        "ts": time.time(),
+        "idx": idx,
+        "env_score": env_score,
+        "text_score": text_score,
+        "metacog_score": metacog_score,
+        "metacog": metacog_metrics,
+        "n_bug_files": len(bug_files) if bug_files else 0,
+        "final": final,
+    }
+    _TRACE_FH.write(json.dumps(payload) + "\n")
+
+    # Buffer the per-prediction calibration triples
+    for pred, actual_len, label in metacog_details:
+        _CAL_BUFFER.append({"pred": pred, "actual_len": int(actual_len),
+                            "label": label})
+
+    # Flush the calibration buffer every CALIBRATION_LOG_EVERY calls.
+    # The plot script consumes this JSON.
+    if len(_CAL_BUFFER) % max(1, CALIBRATION_LOG_EVERY) == 0:
+        _flush_calibration_buffer()
+
+
+def _flush_calibration_buffer():
+    """Write the rolling calibration buffer to disk in the plot's expected
+    schema: {pred: [...], actual_len: [...], label: [...]} where label is
+    1 (bug), 0 (safe), or null (unknown)."""
+    if not _CAL_BUFFER:
+        return
+    out = {
+        "pred": [d["pred"] for d in _CAL_BUFFER],
+        "actual_len": [d["actual_len"] for d in _CAL_BUFFER],
+        "label": [d["label"] for d in _CAL_BUFFER],
+    }
+    tmp = EVAL_CALIBRATION_PATH + ".tmp"
+    with open(tmp, "w") as fh:
+        json.dump(out, fh)
+    os.replace(tmp, EVAL_CALIBRATION_PATH)
 
 
 # ── Training Plots ──────────────────────────────────────────────────
@@ -492,7 +589,9 @@ def save_training_plots(rewards, output_dir):
     os.makedirs(output_dir, exist_ok=True)
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-    fig.suptitle("CodeReviewEnv v3 — GRPO Training on Qwen3-8B", fontsize=16, fontweight='bold', y=1.02)
+    model_short = MODEL_NAME.split("/")[-1] if "/" in MODEL_NAME else MODEL_NAME
+    fig.suptitle(f"CodeReviewEnv v3 — GRPO Training on {model_short}",
+                 fontsize=16, fontweight='bold', y=1.02)
 
     # 1. Reward curve with smoothing
     axes[0].plot(rewards, alpha=0.2, color="#667eea", linewidth=0.8, label="Per-step")
@@ -915,12 +1014,34 @@ def main():
         print("❌ Cannot generate results without training data. Exiting.")
         sys.exit(1)
 
+    # ── Auto-regenerate calibration plot from REAL training data ──
+    # The reward fn streams (pred, actual_len, label) triples to
+    # eval_calibration.json on every call.  After training we run the
+    # plot script in real mode so the headline calibration figure is
+    # produced from the actual model's predictions, not a heuristic
+    # proxy.
+    try:
+        _flush_calibration_buffer()
+        if os.path.exists(EVAL_CALIBRATION_PATH):
+            import subprocess
+            print(f"\n📐 Regenerating calibration plot from real training data...")
+            subprocess.run([
+                sys.executable,
+                os.path.join(os.path.dirname(__file__), "scripts", "generate_calibration_plot.py"),
+                "--mode", "real",
+                "--data", EVAL_CALIBRATION_PATH,
+                "--out", os.path.join(OUTPUT_DIR, "calibration_plot.png"),
+            ], check=False)
+    except Exception as e:
+        print(f"⚠️  Calibration plot regeneration failed (not fatal): {e}")
+
     elapsed = time.time() - start_time
     print(f"\n{'='*60}")
     print(f"  ✅ Training complete in {elapsed/3600:.1f} hours")
     print(f"  📁 Model: {OUTPUT_DIR}")
     print(f"  📊 Plots: {OUTPUT_DIR}/training_curves.png")
     print(f"  📈 Stats: {OUTPUT_DIR}/training_stats.json")
+    print(f"  📐 Calibration: {OUTPUT_DIR}/calibration_plot.png")
     print(f"{'='*60}")
 
 

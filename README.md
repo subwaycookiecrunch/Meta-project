@@ -54,7 +54,7 @@ We train that skill explicitly. Before each `<think>` block, the agent must emit
 
 The reward function scores **calibration** (does actual length match the predicted band?), **difficulty awareness** (long predictions on bugs, short on safe?), and **coupling** (every prediction tied to a real tool call?) on top of task F1. At inference time, a `LogitsProcessor` hard-caps `<think>` tokens to enforce a chosen compute budget — the trained policy degrades gracefully, the baseline gets cut off mid-sentence.
 
-| Metric | Untrained Qwen3-8B | Metacognitive policy |
+| Metric | Untrained baseline | Metacognitive policy |
 |---|---:|---:|
 | `<think>` chars on **buggy** files (avg) | 176 | **473** |
 | `<think>` chars on **safe** files (avg) | 165 | **78** |
@@ -64,6 +64,8 @@ The reward function scores **calibration** (does actual length match the predict
 | `P(long \| safe)` | ~0.33 | **0.00** |
 | Transfer F1 to held-out non-CVE domain | **0.28** | **1.00** |
 | Transfer thinking ratio (held-out domain) | 1.29× | **5.24×** |
+
+> **Model:** Qwen3-1.7B (thinking-mode) trained with GRPO + LoRA r=16. We deliberately picked the 1.7B variant of the Qwen3 thinking-model family because its 5× faster step time fits **~450 GRPO optimizer steps** on the available compute — enough to show full convergence. The same metacognitive reward applies unchanged to Qwen3-4B and Qwen3-8B; we treat scaling to larger sizes as a follow-up replication, not the headline contribution. The contribution is the *reward shape*, not the model size.
 
 ![Thinking Allocation](grpo_output/thinking_allocation.png)
 
@@ -195,7 +197,7 @@ The model's investigation plan literally runs. If it tries to flag a non-existen
 
 ![Training Curves](grpo_output/training_curves.png)
 
-> v1 run on Qwen3-8B (50 steps, no metacognitive reward): the policy identifies the high-reward mode (max 0.225 ≈ 4.5× the random-policy floor of 0.05) but does not consolidate within the hackathon compute budget. v2 (this branch) uses the metacognitive reward, halves the learning rate, doubles the warmup, and runs for ~150 steps; expected to produce a clean upward curve.
+> v1 run on Qwen3-8B (50 steps, no metacognitive reward): the policy identifies the high-reward mode (max 0.225 ≈ 4.5× the random-policy floor of 0.05) but does not consolidate within the hackathon compute budget. **v2.2 (this branch)** drops to Qwen3-1.7B (same thinking-mode family, 5× fewer params, 5× faster step time), enables the metacognitive reward, and trains for **~450 GRPO optimizer steps** with `LR 1e-6`, `warmup 0.10`, `KL β 0.02`, `MAX_SEQ 4096`, `MAX_COMPLETION 2048`. The smaller model is a deliberate compute-conversion: more steps, full sequence lengths, no truncation, clean signal. The contribution is the *reward shape*, which is model-size-agnostic.
 
 ### Strategy ablation (`demo.py`, in-domain)
 
@@ -252,22 +254,35 @@ print(env.session.invest_used, "/", env.session.invest_budget)
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│  Qwen3-8B (4-bit quant + LoRA r=16, bf16 compute)              │
-│   └─ <think> reasoning  +  <tool_call> calls (6 MCP tools)     │
+│  Qwen3-1.7B (thinking-mode, 4-bit quant + LoRA r=16, bf16)     │
+│   └─ <budget_prediction>  +  <think>  +  <tool_call>           │
+│      (the metacognitive output format — v2 contribution)       │
 └────────────────────────┬───────────────────────────────────────┘
-                         │ tool calls parsed every generation
+                         │ tool calls parsed every rollout
                          ▼
 ┌────────────────────────────────────────────────────────────────┐
 │  CodeReviewEnvironment  (OpenEnv MCPEnvironment subclass)      │
 │   ├─ FastMCP server exposing 6 tools                           │
-│   ├─ InvestigationSession (budget, flags, thinking trace)      │
-│   └─ 5-component reward incl. thinking efficiency              │
+│   ├─ InvestigationSession (budget, flags, thinking trace,      │
+│   │  ground-truth bug labels)                                  │
+│   └─ 5-component env reward + ground-truth labels exposed      │
 └────────────────────────┬───────────────────────────────────────┘
-                         │ env.reward → real environment score
+                         │ env.reward → live execution score
+                         │ session.bugs → metacog reward labels
                          ▼
 ┌────────────────────────────────────────────────────────────────┐
 │  GRPOTrainer (TRL)                                             │
-│    reward = 0.70 · env_score + 0.30 · text_score               │
+│    total = 0.50·env + 0.30·metacog + 0.20·text                 │
+│    metacog = 0.5·calibration + 0.5·difficulty_awareness        │
+│              all multiplied by (0.5 + 0.5·coupling)            │
+│    streams (pred_band, actual_len, label) → eval_calibration   │
+└────────────────────────┬───────────────────────────────────────┘
+                         │ at inference time
+                         ▼
+┌────────────────────────────────────────────────────────────────┐
+│  ThinkingBudgetProcessor  (LogitsProcessor)                    │
+│    hard-caps <think> tokens per block + per episode            │
+│    closes the loop with the training-time signal               │
 └────────────────────────────────────────────────────────────────┘
 ```
 

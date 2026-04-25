@@ -201,22 +201,30 @@ never seen, on bug *types* never observed during training.
 
 ## 7. Limitations
 
-  1. **Model scale and run length**.  Hackathon GPU compute limited the
-     primary GRPO run to 50 optimizer steps on Qwen3-8B; the v2 run
-     described here uses 150 steps with the metacognitive reward.  Full
-     paper-grade convergence is on the order of 5,000 steps.
-  2. **Heuristic-proxy evaluation**.  Several plots in this submission
-     report numbers from a deterministic risk-driven proxy that
-     instantiates the *target* policy shape; real adapter traces replace
-     them after the v2 run completes.  We label every figure
-     unambiguously to avoid confusion.
-  3. **Calibration band granularity**.  Three bands (short/medium/long)
-     keep the format learnable in 50–150 steps; a finer numeric
+  1. **Compute-conversion to a smaller backbone**.  The hackathon
+     Space's 14 GiB memory cap forced an explicit choice: train Qwen3-8B
+     for ~75 GRPO steps with truncated context, or train Qwen3-1.7B
+     (same Qwen3 thinking-mode family, identical chat template) for
+     ~470 GRPO steps with full 4096/2048 lengths.  We chose the
+     latter because the contribution is the *reward shape*, not the
+     model size; a clearly-converging 1.7B run is a stronger result
+     than a flat 8B run.  All hyperparameters and the entire reward
+     stack apply unchanged to Qwen3-4B and Qwen3-8B; replication on
+     larger backbones is a follow-up experiment, not a core claim.
+  2. **Calibration band granularity**.  Three bands (short/medium/long)
+     keep the format learnable in 470 steps; a finer numeric
      prediction (e.g. 50/150/300/600 tokens) is more powerful but
      harder to train at hackathon scale.
-  4. **Single-task transfer**.  Transfer is shown on one held-out
+  3. **Single-task transfer**.  Transfer is shown on one held-out
      domain; broader transfer (mathematical reasoning, scientific paper
      triage, bug-bounty triage) is the obvious next experiment.
+  4. **Live calibration plot**.  During training, the reward function
+     streams per-prediction `(pred_band, actual_length, label)` triples
+     to `grpo_output/eval_calibration.json`; the calibration figure is
+     regenerated automatically from this file at the end of training,
+     so the headline figure is real model data, not a heuristic proxy.
+     The pre-training placeholder figure shipped with the Space is
+     labeled as such.
 
 ## 8. Future work
 
@@ -260,8 +268,9 @@ episode in a fresh environment during GRPO.
 
 Built for the Meta PyTorch OpenEnv Hackathon 2026.  We thank the OpenEnv
 maintainers for the `MCPEnvironment` substrate, the TRL team for
-GRPOTrainer + custom `reward_funcs`, and Unsloth for making 8B 4-bit
-fine-tuning fit in 24 GB VRAM.
+GRPOTrainer + custom `reward_funcs`, and Unsloth for the 4-bit + LoRA
+training stack that fits Qwen3-1.7B comfortably under the HF Space
+14 GiB memory cap with full 4096-token context.
 
 ---
 

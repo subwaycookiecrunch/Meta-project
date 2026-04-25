@@ -133,18 +133,26 @@ training:
     - peft
     - unsloth
     - bitsandbytes
-  base_model: Qwen/Qwen3-8B
+  base_model: Qwen/Qwen3-1.7B
+  base_model_alternatives:  # the same reward shape applies unchanged
+    - Qwen/Qwen3-4B
+    - Qwen/Qwen3-8B
   precision: bfloat16 (4-bit quantized base + bf16 LoRA)
   lora_rank: 16
   lora_alpha: 32
-  num_episodes: 300            # v2: was 200
-  num_train_epochs: 2          # v2: was 1 → ~75 optimizer steps
-  learning_rate: 5e-7          # v2: was 1e-6
-  warmup_ratio: 0.10           # v2: was 0.05
-  grpo_beta: 0.02              # KL coefficient
-  max_seq_length: 2048         # v1 value — Space memory cap
-  max_completion_length: 1024  # v1 value — Space memory cap
+  num_episodes: 500            # v2.2: was 300 (1.7B fits more rollouts)
+  num_train_epochs: 3          # v2.2: was 2 → ~470 optimizer steps total
+  learning_rate: 1e-6          # v2.2: 1.7B can take a higher LR safely
+  warmup_ratio: 0.10           # longer warmup damps early instability
+  grpo_beta: 0.02              # KL coefficient — wider exploration
+  max_seq_length: 4096         # v2.2: 1.7B fits, no prompt truncation
+  max_completion_length: 2048  # v2.2: room for full reports + budget tags
+  grad_accum_steps: 4          # v2.2: was 8 — more frequent updates
   metacognitive_reward_weight: 0.30
+  in_training_eval:
+    calibration_log_every: 1   # every reward call logs (pred, len, label)
+    calibration_log_path: grpo_output/eval_calibration.json
+    trace_log_path: grpo_output/trace_log.jsonl
   live_environment_execution: true
   notes: |
     Reward function PARSES tool calls from model outputs and EXECUTES

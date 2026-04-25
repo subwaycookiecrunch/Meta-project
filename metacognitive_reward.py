@@ -36,8 +36,8 @@ from the main train_grpo.py.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import List, Optional, Tuple
 
 
 # ── Predicted budget bands (tokens of <think> content, characters proxy) ──
@@ -89,6 +89,10 @@ class MetacogResult:
     coupling: float              # 0..1 — fraction of preds followed by a tool call
     n_predictions: int           # how many predictions the model emitted
     raw_score: float             # weighted aggregate (0..1)
+    # Per-prediction trace for downstream calibration plots.  Each entry:
+    #   (predicted_band, actual_think_length, label_int_or_None)
+    # label = 1 if the file is in bug_files, 0 if safe, None if unknown.
+    details: List[Tuple[str, int, Optional[int]]] = field(default_factory=list)
 
 
 def _calibration_score(predicted: str, actual_len: int) -> float:
@@ -165,7 +169,7 @@ def compute_metacognitive_reward(
         # signal but don't penalize so the GRPO loss can still flow from
         # the live-execution reward; this just means metacognition has
         # not been learned yet.
-        return MetacogResult(0.0, 0.0, 0.0, 0, 0.0)
+        return MetacogResult(0.0, 0.0, 0.0, 0, 0.0, [])
 
     # ── 2. Calibration ────────────────────────────────────────────────────
     calibration_scores = []
@@ -174,12 +178,17 @@ def compute_metacognitive_reward(
         calibration_scores.append(_calibration_score(pred.lower(), actual_len))
     calibration = sum(calibration_scores) / len(calibration_scores)
 
-    # ── 3. Difficulty awareness ──────────────────────────────────────────
-    # For each prediction-then-flag/skip triple, look up the file label.
-    diff_scores = []
+    # ── 3. Difficulty awareness + per-prediction details ─────────────────
+    # We walk the prediction-think-tool triples in order and attach the
+    # ground-truth label (if available) to each one.  The `details` list
+    # is consumed by the in-training calibration logger to build a real
+    # eval_calibration.json across the run.
+    diff_scores: List[float] = []
+    details: List[Tuple[str, int, Optional[int]]] = []
     coupled = 0
-    for pred, think, tool_json in RE_PRED_THINK_THEN_FLAG.findall(text):
+    for pred, think_text, tool_json in RE_PRED_THINK_THEN_FLAG.findall(text):
         coupled += 1
+        actual_len = len(think_text.strip())
         fpath = _extract_filepath_from_tool_call(tool_json)
         tool = _extract_tool_name(tool_json) or ""
         is_bug: Optional[bool]
@@ -193,6 +202,8 @@ def compute_metacognitive_reward(
         else:
             is_bug = None
         diff_scores.append(_difficulty_score(pred.lower(), is_bug))
+        label_int = None if is_bug is None else int(is_bug)
+        details.append((pred.lower(), actual_len, label_int))
 
     difficulty_awareness = sum(diff_scores) / len(diff_scores) if diff_scores else 0.0
     coupling = coupled / max(1, n_preds)
@@ -209,6 +220,7 @@ def compute_metacognitive_reward(
         coupling=coupling,
         n_predictions=n_preds,
         raw_score=max(0.0, min(1.0, raw)),
+        details=details,
     )
 
 
