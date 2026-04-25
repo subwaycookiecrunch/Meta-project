@@ -1,6 +1,7 @@
 # OpenEnv Manifest — The Thinking Budget
 # Meta PyTorch OpenEnv Hackathon 2026
-# Theme 3.1: World Modeling → Professional Tasks
+# Primary theme: #5 Wild Card  (out-of-box / metacognitive RL)
+# Secondary:    3.1 World Modeling → Professional Tasks
 name: thinking-budget
 display_name: "The Thinking Budget"
 version: "3.3.0"   # v3.3: right-sized training budget for A10G wall-clock
@@ -18,7 +19,7 @@ description: >
   bypasses, tenant leaks): F1 0.28 → 1.00, 5.2× allocation ratio
   preserved.
 
-theme: "3.1 World Modeling / Professional Tasks"
+theme: "5 Wild Card (primary) + 3.1 World Modeling / Professional Tasks (secondary)"
 license: mit
 authors:
   - name: lucid987654
@@ -188,6 +189,21 @@ innovation:
     budget processor at inference → policy degrades gracefully under
     arbitrary compute tightening. The learned policy transfers across
     domains without retraining.
+  adversarial_mechanics:
+    deceptive_files:
+      description: |
+        ~20% of safe files have their features inflated to look
+        suspicious (high churn, high complexity). Heuristic-only
+        policies that threshold on features will flag them incorrectly.
+        The agent must actually READ and REASON about the code.
+      implementation: environment.py — injected at reset() time
+    cost_observability:
+      description: |
+        Every tool response includes a running thinking cost counter.
+        The agent can see how much reasoning budget it has consumed,
+        making budget allocation a real-time strategic decision
+        visible in the observation space.
+      implementation: environment.py — tracking in InvestigationSession.thinking_cost
   trained_policy_targets:
     untrained_thinking_ratio: 1.07
     trained_thinking_ratio:   6.06

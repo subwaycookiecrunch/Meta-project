@@ -4,8 +4,8 @@ eval_baseline.py — Before/After Comparison
 Demonstrates that GRPO training actually improved the agent's behavior.
 
 Compares:
-  1. Untrained baseline    — Qwen3-8B with the system prompt only
-  2. Trained model         — Qwen3-8B + LoRA adapter from grpo_output/
+  1. Untrained baseline    — Qwen3-1.7B with the system prompt only
+  2. Trained model         — Qwen3-1.7B + LoRA adapter from grpo_output/
 
 On the SAME 5 episodes (deterministic seeds), running the same investigation
 loop and reporting per-episode and mean scores.
@@ -31,7 +31,7 @@ import matplotlib.pyplot as plt
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # ── Config ─────────────────────────────────────────────────────────
-MODEL_NAME = "Qwen/Qwen3-8B"
+MODEL_NAME = os.environ.get("MODEL_NAME", "Qwen/Qwen3-1.7B")
 ADAPTER_DIR = "./grpo_output"
 EVAL_SEEDS = [42, 137, 256, 512, 1024]    # 5 deterministic episodes
 DIFFICULTY = "easy"
@@ -203,7 +203,7 @@ def plot_comparison(baseline_scores, trained_scores):
     ax.set_xticks(x)
     ax.set_xticklabels([f"seed={s}" for s in EVAL_SEEDS])
     ax.set_ylabel("Total Score (env reward)", fontsize=12)
-    ax.set_title("CodeReviewEnv v3 — Baseline vs GRPO-Trained Qwen3-8B",
+    ax.set_title("CodeReviewEnv v3 — Baseline vs GRPO-Trained Qwen3-1.7B",
                  fontsize=14, fontweight='bold')
     ax.set_ylim(0, max(1.0, max(baseline_scores + trained_scores) * 1.2))
     ax.legend(fontsize=11)

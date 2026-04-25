@@ -146,8 +146,8 @@ def plot(untrained_bug, untrained_safe, trained_bug, trained_safe,
     fig, axes = plt.subplots(1, 2, figsize=(13, 5.5), sharey=True)
 
     panels = [
-        ("Untrained Qwen3-8B", untrained_bug, untrained_safe, axes[0]),
-        ("Trained Qwen3-8B (GRPO)", trained_bug, trained_safe, axes[1]),
+        ("Untrained Qwen3-1.7B", untrained_bug, untrained_safe, axes[0]),
+        ("Trained Qwen3-1.7B (GRPO)", trained_bug, trained_safe, axes[1]),
     ]
 
     bins = np.arange(0, 600, 30)

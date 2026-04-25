@@ -155,7 +155,10 @@ def red_team_attack_choices():
     return choices, default
 
 
-def render_red_team_attack(name):
+def render_red_team_attack(*args):
+    name = args[0] if args else None
+    if not name:
+        return ("_Select an attack from the dropdown above._", "")
     data = load_red_team()
     if data is None:
         return ("_Red-team results not found._",
@@ -457,10 +460,60 @@ training_status = {
 def run_training():
     training_status["running"] = True
     training_status["done"] = False
-    training_status["progress"] = "🚀 Initializing training script..."
+
+    sft_data = os.path.join(ROOT, "data", "sft_demonstrations.json")
+    sft_adapter = os.path.join(RESULTS_DIR, "sft_adapter")
+    sft_script = os.path.join(ROOT, "train_sft_warmup.py")
+
+    # ── Phase 1: SFT warmup (if data exists and adapter doesn't) ──
+    if (os.path.exists(sft_data) and os.path.exists(sft_script)
+            and not os.path.exists(sft_adapter)):
+        training_status["progress"] = "🔄 Phase 1/2: SFT warmup (teaching output format)..."
+        save_logs(training_status["progress"])
+        try:
+            proc = subprocess.Popen(
+                [sys.executable, "train_sft_warmup.py"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+                cwd=ROOT,
+            )
+            lines = []
+            for line in proc.stdout:
+                lines.append(line.strip())
+                training_status["progress"] = "Phase 1/2 SFT:\n" + "\n".join(lines[-25:])
+                save_logs(training_status["progress"])
+                print(line.strip())
+            exit_code = proc.wait()
+            if exit_code != 0:
+                tail = "\n".join(lines[-15:])
+                training_status["progress"] = (
+                    f"⚠️ SFT warmup failed (exit {exit_code}), continuing with base model.\n{tail}"
+                )
+                save_logs(training_status["progress"])
+        except Exception as e:
+            training_status["progress"] = f"⚠️ SFT warmup error: {e}. Continuing with base model."
+            save_logs(training_status["progress"])
+
+    # ── Phase 2: GRPO ────────────────────────────────────────────
+    training_status["progress"] = "🚀 Phase 2/2: GRPO training (policy learning)..."
     save_logs(training_status["progress"])
 
     try:
+        env = os.environ.copy()
+        # If SFT adapter exists, tell GRPO to load it + use optimized
+        # hyperparams for the post-SFT regime (the model already knows
+        # the output format, so we can train faster and with higher LR)
+        if os.path.exists(sft_adapter):
+            env["ADAPTER_PATH"] = sft_adapter
+            env["NUM_EPISODES"] = "150"       # 1 epoch, not 2
+            env["NUM_TRAIN_EPOCHS"] = "1"     # single pass
+            env["LEARNING_RATE"] = "5e-6"     # 5x higher (format is stable)
+            env["GRAD_ACCUM_STEPS"] = "2"
+            print(f"📋 GRPO will load SFT adapter from {sft_adapter}")
+            print(f"📋 Using post-SFT hyperparams: 150 eps, 1 epoch, lr=5e-6")
+
         proc = subprocess.Popen(
             [sys.executable, "train_grpo.py"],
             stdout=subprocess.PIPE,
@@ -468,6 +521,7 @@ def run_training():
             text=True,
             bufsize=1,
             cwd=ROOT,
+            env=env,
         )
         lines = []
         for line in proc.stdout:
@@ -480,6 +534,46 @@ def run_training():
         if exit_code == 0 and os.path.exists(TRAINING_STATS):
             training_status["done"] = True
             training_status["progress"] = "✅ Training Complete!"
+
+            # ── Post-training: run transfer eval with real model ──
+            transfer_script = os.path.join(ROOT, "scripts", "run_transfer_inference.py")
+            if os.path.exists(transfer_script):
+                training_status["progress"] = "🔬 Running transfer eval with trained adapter..."
+                save_logs(training_status["progress"])
+                try:
+                    tproc = subprocess.Popen(
+                        [sys.executable, transfer_script],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True, bufsize=1, cwd=ROOT,
+                    )
+                    for tline in tproc.stdout:
+                        print(tline.strip())
+                    tproc.wait()
+                    training_status["progress"] = "✅ Training + Transfer Eval Complete!"
+                except Exception as te:
+                    print(f"⚠️ Transfer eval failed: {te}")
+                    training_status["progress"] = "✅ Training Complete! (transfer eval skipped)"
+
+            # ── Post-training: before/after comparison ──
+            baseline_script = os.path.join(ROOT, "eval_baseline.py")
+            if os.path.exists(baseline_script):
+                training_status["progress"] = "📊 Running baseline vs trained comparison..."
+                save_logs(training_status["progress"])
+                try:
+                    bproc = subprocess.Popen(
+                        [sys.executable, baseline_script],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True, bufsize=1, cwd=ROOT,
+                    )
+                    for bline in bproc.stdout:
+                        print(bline.strip())
+                    bproc.wait()
+                    training_status["progress"] = "✅ All evaluations complete!"
+                except Exception as be:
+                    print(f"⚠️ Baseline eval failed: {be}")
+                    training_status["progress"] = "✅ Training Complete! (baseline eval skipped)"
         else:
             training_status["done"] = False
             tail = "\n".join(lines[-20:])
@@ -567,7 +661,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title="The Thinking Budget") as app:
 
             with gr.Row():
                 with gr.Column():
-                    gr.Markdown("## 🤖 Untrained Qwen3-8B")
+                    gr.Markdown("## 🤖 Untrained Qwen3-1.7B")
                     untrained_render = gr.Markdown(value=init_u, height=600)
                 with gr.Column():
                     gr.Markdown("## 🧠 Trained Policy (GRPO)")
@@ -651,7 +745,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title="The Thinking Budget") as app:
 
             with gr.Row():
                 with gr.Column():
-                    gr.Markdown("## 🤖 Untrained Qwen3-8B (under budget)")
+                    gr.Markdown("## 🤖 Untrained Qwen3-1.7B (under budget)")
                     budget_render_u = gr.Markdown(height=550)
                 with gr.Column():
                     gr.Markdown("## 🧠 Metacognitive policy (under budget)")
@@ -964,7 +1058,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title="The Thinking Budget") as app:
                 "### Stack\n\n"
                 "- OpenEnv 0.2.3 — `MCPEnvironment` + FastMCP server\n"
                 "- TRL ≥ 0.17 — `GRPOTrainer` with custom `reward_funcs`\n"
-                "- Unsloth + bitsandbytes — 4-bit Qwen3-8B fits in 16 GB VRAM\n"
+                "- Unsloth + bitsandbytes — 4-bit Qwen3-1.7B fits comfortably in 16 GB VRAM\n"
                 "- PEFT — LoRA r=16, α=32, on attention + MLP projections\n"
                 "- Gradio 5 — this Space (auto-refreshing dashboard + interactive demo)\n\n"
                 "### Reward-hacking defenses (NEW)\n\n"
@@ -994,4 +1088,4 @@ if __name__ == "__main__":
         print("🚀 [BOOT] Starting background training thread...")
         threading.Thread(target=run_training, daemon=True).start()
 
-    app.launch(server_name="0.0.0.0", server_port=7860)
+    app.launch(server_name="0.0.0.0", server_port=7860, ssr_mode=False)

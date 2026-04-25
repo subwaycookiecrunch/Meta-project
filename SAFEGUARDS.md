@@ -1,17 +1,12 @@
 # SAFEGUARDS.md — Reward-Hacking Defenses, Empirically Verified
 
-> *§8 of the OpenEnv hackathon guide explicitly asks for protection against
-> reward hacking. This document enumerates the attacks we anticipated,
-> the geometric defense that prevents each, and the empirical results
-> from running each attack through the trainer's actual reward path.*
+> *Hackathon FAQ Q57:* **"Do not optimize a reward you have not tried to break yourself first. The easiest way to avoid reward hacking is to adversarially test your environment and reward design before the model does."**
+>
+> *That's exactly what this document is. We tried to break it. Here are the attacks, here is what survived, and here is the empirical lower bound on the defense's margin.*
+>
+> §8 of the OpenEnv hackathon guide and FAQ Q43–Q44 ("use layered verification") describe the same property in slightly different words. We treat all three as the design contract this submission is held to. The companion script — [`scripts/red_team.py`](scripts/red_team.py) — runs every attack through the **exact** reward call (`compute_metacognitive_reward`) the GRPO trainer uses, plus a faithful local reproduction of the env-reward and text-reward shapes from `train_grpo.py::reward_fn`.
 
-The companion script — [`scripts/red_team.py`](scripts/red_team.py) —
-constructs five concrete cheating strategies plus one honest reference
-policy and scores all six with the **exact** reward call (`compute_metacognitive_reward`)
-that the GRPO trainer uses, plus a faithful local reproduction of the
-env-reward and text-reward shapes from `train_grpo.py::reward_fn`.
-
-## TL;DR
+## Result
 
 ```
 ✅ All 5 attacks scored strictly below the honest policy (0.850).

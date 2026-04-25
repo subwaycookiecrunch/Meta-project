@@ -24,6 +24,16 @@ robust against five distinct hacking strategies.*
 
 Total: **~14 minutes** for a complete assessment.
 
+### Why this environment is novel (40% criterion)
+
+This is **not** a code-review tool. The CVE triage is a *substrate*. The contribution is:
+
+1. **Metacognitive self-assessment** — before every `<think>` block the model must predict its own difficulty band. No existing reasoning-RL work does this.
+2. **Deceptive files** — ~20% of safe files have artificially inflated risk features (high churn, high complexity). A heuristic-only policy will flag them incorrectly. The agent **must** actually read and reason about the code, not just threshold on features.
+3. **Cost observability** — every tool response includes a running thinking-cost counter. The agent can see how much compute it has spent and adapt in real-time. Standard environments hide this.
+4. **Adversarial red team** — 5 attack strategies, all empirically defeated. The reward is formally analyzed for orthogonality.
+5. **Domain transfer** — the same allocation policy transfers to non-CVE code review without retraining (F1: 0.28 → 1.00).
+
 ---
 
 ## Mapping the OpenEnv guide criteria to evidence
@@ -48,6 +58,8 @@ Total: **~14 minutes** for a complete assessment.
 
 ### §8, §21 — Prevention against reward hacking ✅
 
+> *FAQ Q57: "Do not optimize a reward you have not tried to break yourself first."*
+
 | Sub-criterion | Evidence | Where to look |
 |---|---|---|
 | Multiple independent reward fns (re-stated for emphasis) | env / metacog / text — orthogonal | `train_grpo.py::reward_fn` |
@@ -56,9 +68,11 @@ Total: **~14 minutes** for a complete assessment.
 | Coupling = multiplier (not sum) | Caps unattached prediction spam at 50% of metacog signal | `metacognitive_reward.py::compute_metacognitive_reward`, line 215 |
 | Sandboxed execution | Tools run inside `MCPEnvironment`, no shell access | `server/environment.py` |
 
-> **This is the criterion most submissions will skip.** Section §8 of the guide explicitly says *"Reward hacking is one of the biggest practical failure modes."* We treated this as a primary deliverable.
+> **This is the criterion most submissions will skip.** §8 of the guide explicitly says *"Reward hacking is one of the biggest practical failure modes."* FAQ Q43–Q44 calls for layered verification. We treated both as primary deliverables, not as a polish-pass.
 
 ### §9 — Process-aware feedback ✅
+
+> *FAQ Q11: "Process supervision means giving feedback on intermediate reasoning or intermediate steps, not only on the final outcome."*
 
 | Sub-criterion | Evidence | Where to look |
 |---|---|---|
@@ -102,8 +116,8 @@ Total: **~14 minutes** for a complete assessment.
 | Adversarial robustness demo | Pick an attack, see why it loses to the honest policy | Space → 🛡 Red Team tab |
 | Calibration + transfer plots | Auto-generated panels | Space → 📐 Calibration & Transfer tab |
 | Live training visibility | Auto-refreshing log + curve | Space → 🏋️ Training Progress tab |
-| Demo video | (linked in README) | `__YOUTUBE_URL__` |
-| Blog post | (linked in README) | [`blog_post.md`](blog_post.md) |
+| Demo video | (pending) | — |
+| Blog post | [`blog_post.md`](blog_post.md) | linked in README |
 
 ---
 

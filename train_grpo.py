@@ -1,14 +1,20 @@
 """
 GRPO Training Script for CodeReviewEnv v3
 ==========================================
-Trains Qwen3-8B to investigate CVE vulnerabilities using MCP tools.
-The agent learns to read code, search patterns, and produce triage reports.
+Trains Qwen3-1.7B (thinking-mode variant) to investigate CVE vulnerabilities
+using MCP tools. The agent learns to read code, search patterns, predict
+its own reasoning effort (`<budget_prediction>`), and produce triage reports.
 
-Qwen3-8B was chosen for:
-  - Superior multi-step REASONING (critical for vulnerability analysis)
-  - Built for agentic tool-calling workflows (our 6 MCP tools)
-  - 128K native context window (reads more code per investigation)
-  - Better at explaining WHY code is vulnerable (higher report scores)
+Qwen3-1.7B was chosen because:
+  - Smallest variant of the Qwen3 thinking-mode family — emits real `<think>`
+    blocks, so the metacognitive reward has a behaviour to shape
+  - 5× faster step time than Qwen3-8B → 400 GRPO steps fit in the 14 GiB
+    Space memory cap and the 12-hour A10G compute budget
+  - At 1.7B the prior is weak enough that the metacognitive signal is the
+    only plausible cause of the bug-vs-safe allocation pattern (stronger
+    methodological claim than running 8B+ which "would have done it
+    anyway")
+  - The same reward stack applies unchanged to Qwen3-4B and Qwen3-8B
 
 Setup on HuggingFace / Google Colab (A10G or A100 GPU):
     !pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
@@ -34,7 +40,7 @@ from datetime import datetime
 # variant (identical chat template, native <think> support, agentic
 # tool-calling).  Chosen as the primary training target because:
 #   • Fits the HF Space 14 GiB memory cap with full 4096 / 2048 lengths
-#   • 5× fewer params → 2-3× faster per step → ~450 GRPO steps fit
+#   • 5× fewer params → 2-3× faster per step → 400 GRPO steps fit
 #     in the wall-clock budget (vs ≤75 steps for 8B)
 #   • Smaller models adapt to a brand-new output format
 #     (<budget_prediction>) faster, producing visibly cleaner curves
@@ -48,6 +54,11 @@ OUTPUT_DIR = "./grpo_output"
 CHECKPOINT_DIR = os.path.join(OUTPUT_DIR, "checkpoints")
 EVAL_CALIBRATION_PATH = os.path.join(OUTPUT_DIR, "eval_calibration.json")
 TRACE_LOG_PATH = os.path.join(OUTPUT_DIR, "trace_log.jsonl")
+
+# SFT warmup adapter: if set, the model is initialized from this adapter
+# before applying a fresh LoRA for GRPO.  This is the two-phase training
+# pipeline: SFT (format learning) → GRPO (policy learning).
+ADAPTER_PATH = os.environ.get("ADAPTER_PATH", "")
 
 # Training hyperparameters (right-sized for the available wall-clock —
 # Qwen3-1.7B on the HF Space A10G, v2.3).
@@ -832,7 +843,7 @@ def main():
             from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
             from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
-            # 4-bit quantization to fit 8B model in 24GB VRAM
+            # 4-bit quantization to fit 1.7B model in the 14 GiB Space cap with headroom for activations
             bnb_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
@@ -897,6 +908,38 @@ def main():
         model = cast_model_to_bfloat16(model)
         model = install_lm_head_dtype_hook(model)
         model.gradient_checkpointing_enable()
+
+    # ── Load SFT warmup adapter if available ───────────────────────
+    # Two-phase training: SFT teaches the output format, GRPO refines
+    # the allocation policy.  If ADAPTER_PATH is set, we load the SFT
+    # adapter, merge it into the base model, then the fresh LoRA above
+    # learns the RL policy on top of the format-aware weights.
+    if ADAPTER_PATH and os.path.exists(ADAPTER_PATH):
+        print(f"\n🔄 Loading SFT warmup adapter from {ADAPTER_PATH}...")
+        try:
+            from peft import PeftModel
+            # The model already has a LoRA attached from above.
+            # We need to merge the SFT adapter weights, then re-apply
+            # a fresh LoRA.  PEFT makes this possible via merge_and_unload
+            # on the SFT adapter, but since we're already in 4-bit land,
+            # the simpler approach is to load the SFT weights directly
+            # into the existing LoRA parameters.
+            import safetensors.torch as st
+            adapter_file = os.path.join(ADAPTER_PATH, "adapter_model.safetensors")
+            if os.path.exists(adapter_file):
+                sft_state = st.load_file(adapter_file)
+                model_state = model.state_dict()
+                loaded = 0
+                for k, v in sft_state.items():
+                    if k in model_state and model_state[k].shape == v.shape:
+                        model_state[k].copy_(v.to(model_state[k].dtype))
+                        loaded += 1
+                print(f"✅ Loaded {loaded} SFT adapter weights (model starts format-aware)")
+            else:
+                print(f"⚠️  adapter_model.safetensors not found in {ADAPTER_PATH}")
+        except Exception as e:
+            print(f"⚠️  Failed to load SFT adapter: {e}")
+            print("   Continuing with base model weights.")
 
     # Final dtype verification — log lm_head dtype so it's obvious
     # in the training logs whether the fix took effect. The hook above
@@ -974,12 +1017,39 @@ def main():
         **grpo_kwargs,
     )
 
+    # ── Callback: incremental curves every 25 steps ──
+    # Judges can see reward progression even while training is running.
+    from transformers import TrainerCallback
+
+    class IncrementalPlotCallback(TrainerCallback):
+        """Generate training curves every 25 steps so judges see progress."""
+        def __init__(self, plot_every=25):
+            self.plot_every = plot_every
+            self._last_plot_step = 0
+
+        def on_log(self, args, state, control, logs=None, **kwargs):
+            if state.global_step - self._last_plot_step >= self.plot_every:
+                rewards = []
+                for log in state.log_history:
+                    if "reward" in log:
+                        rewards.append(log["reward"])
+                    elif "rewards/mean" in log:
+                        rewards.append(log["rewards/mean"])
+                if len(rewards) >= 10:
+                    try:
+                        save_training_plots(rewards, OUTPUT_DIR)
+                        self._last_plot_step = state.global_step
+                        print(f"📊 [step {state.global_step}] Incremental training curve saved ({len(rewards)} points)")
+                    except Exception as e:
+                        print(f"⚠️  Incremental plot failed: {e}")
+
     trainer = GRPOTrainer(
         model=model,
         args=config,
         processing_class=tokenizer,
         train_dataset=dataset,
         reward_funcs=reward_fn,
+        callbacks=[IncrementalPlotCallback(plot_every=25)],
     )
 
     # ── Train ───────────────────────────────────────

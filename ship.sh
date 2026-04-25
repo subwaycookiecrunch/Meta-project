@@ -37,6 +37,16 @@ git add train_grpo.py
 git add eval_baseline.py 2>/dev/null || true
 git add VIDEO_SCRIPT.md
 git add PAPER.md
+git add ENV.md 2>/dev/null || true
+git add SAFEGUARDS.md 2>/dev/null || true
+git add JUDGES.md 2>/dev/null || true
+git add MORNING_CHECKLIST.md 2>/dev/null || true
+git add SUBMISSION.md 2>/dev/null || true
+git add SOCIAL.md 2>/dev/null || true
+git add requirements.txt 2>/dev/null || true
+git add tests/ 2>/dev/null || true
+git add morning_run.sh 2>/dev/null || true
+git add scripts/build_improvement_panel.py 2>/dev/null || true
 git add .gitignore
 
 # v2 contribution — calibrated metacognition + budget enforcement + transfer
@@ -45,6 +55,10 @@ git add transfer_eval.py
 git add scripts/budget_processor.py
 git add scripts/generate_calibration_plot.py
 git add data/transfer_episodes.json
+
+# v3 contribution — red team simulator + reward-hacking proof
+git add scripts/red_team.py 2>/dev/null || true
+git add data/red_team_results.json 2>/dev/null || true
 
 # data + scripts
 git add data/demo_traces.json
@@ -59,10 +73,13 @@ git add grpo_output/training_curves.png 2>/dev/null || true
 git add grpo_output/eval_baseline_vs_trained.png 2>/dev/null || true
 git add grpo_output/calibration_plot.png 2>/dev/null || true
 git add grpo_output/transfer_results.png 2>/dev/null || true
+git add grpo_output/improvement_panel.png 2>/dev/null || true
 git add grpo_output/training_stats.json 2>/dev/null || true
 git add grpo_output/transfer_metrics.json 2>/dev/null || true
 git add grpo_output/eval_traces.json 2>/dev/null || true
 git add grpo_output/eval_calibration.json 2>/dev/null || true
+git add grpo_output/eval_calibration.2.json 2>/dev/null || true
+git add grpo_output/trace_log.jsonl 2>/dev/null || true
 
 # ── show what we're committing ──────────────────────────────────────
 echo ""

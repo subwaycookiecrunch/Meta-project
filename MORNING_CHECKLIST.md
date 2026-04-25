@@ -174,7 +174,7 @@ P(long | safe):              0.00     (heuristic) → ?
 transfer F1 untrained:       0.28
 transfer F1 trained:         1.00
 dataset:                     150 CVEs · 2,892 files
-training:                    Qwen3-1.7B + GRPO + LoRA r=16 + ~470 steps
+training:                    Qwen3-1.7B + GRPO + LoRA r=16 + 400 steps (200 ep × 2 epochs)
 ```
 
 ---
