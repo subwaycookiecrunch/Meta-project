@@ -84,14 +84,14 @@ ADAPTER_PATH = os.environ.get("ADAPTER_PATH", "")
 #   GRPO_BETA               0.02
 #   METACOG_ENABLED         true
 #   LORA_R / LORA_ALPHA     16 / 32
-NUM_EPISODES = int(os.environ.get("NUM_EPISODES", "200"))
+NUM_EPISODES = int(os.environ.get("NUM_EPISODES", "100"))
 NUM_GENERATIONS = 2          # GRPO group size
 MAX_COMPLETION_LENGTH = int(os.environ.get("MAX_COMPLETION_LENGTH", "1024"))
 BATCH_SIZE = 1
 GRAD_ACCUM_STEPS = int(os.environ.get("GRAD_ACCUM_STEPS", "2"))
 LEARNING_RATE = float(os.environ.get("LEARNING_RATE", "1e-6"))
 WARMUP_RATIO = 0.10
-NUM_TRAIN_EPOCHS = int(os.environ.get("NUM_TRAIN_EPOCHS", "2"))
+NUM_TRAIN_EPOCHS = int(os.environ.get("NUM_TRAIN_EPOCHS", "1"))
 GRPO_BETA = 0.02
 MAX_SEQ_LENGTH = int(os.environ.get("MAX_SEQ_LENGTH", "2048"))
 LORA_R = 16
