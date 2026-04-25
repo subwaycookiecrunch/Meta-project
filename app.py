@@ -214,4 +214,10 @@ A real security engineer doesn't analyze every file equally. They triage: deep a
             """)
 
 if __name__ == "__main__":
+    # AUTO-START training on boot if not already done
+    if not training_status["done"] and not training_status["running"]:
+        print("🚀 AUTO-STARTING training on boot...")
+        training_status["done"] = False
+        thread = threading.Thread(target=run_training, daemon=True)
+        thread.start()
     app.launch()
