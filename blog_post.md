@@ -261,7 +261,7 @@ In every case the meta-skill is the same: **decide whether to invest in deep rea
 - 🤗 **HF Space:** [lucid987654/code-review-env-v3](https://huggingface.co/spaces/lucid987654/code-review-env-v3) — interactive demo, switch to the **🧠 Try The Agent** tab and pick Dirty COW
 - 📓 **Colab:** [`train_colab.ipynb`](https://colab.research.google.com/github/subwaycookiecrunch/Meta-project/blob/main/train_colab.ipynb) — re-run training end-to-end
 - 💻 **GitHub:** [`subwaycookiecrunch/Meta-project`](https://github.com/subwaycookiecrunch/Meta-project)
-- 🎬 **2-minute demo video:** _(YouTube link added at submission)_
+- 🎬 **2-minute demo video:** `__YOUTUBE_URL__` _(replace with Unlisted YouTube URL at submission time)_
 
 ```bash
 git clone https://huggingface.co/spaces/lucid987654/code-review-env-v3

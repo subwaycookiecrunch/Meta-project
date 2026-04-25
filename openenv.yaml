@@ -3,7 +3,7 @@
 # Theme 3.1: World Modeling → Professional Tasks
 name: thinking-budget
 display_name: "The Thinking Budget"
-version: "3.2.0"   # v3.2: metacognitive reward + budget processor + transfer eval
+version: "3.3.0"   # v3.3: right-sized training budget for A10G wall-clock
 description: >
   An RL environment + auxiliary objective that trains a reasoning LLM to
   PREDICT how hard a problem is BEFORE solving it, then deliver exactly
@@ -140,14 +140,14 @@ training:
   precision: bfloat16 (4-bit quantized base + bf16 LoRA)
   lora_rank: 16
   lora_alpha: 32
-  num_episodes: 500            # v2.2: was 300 (1.7B fits more rollouts)
-  num_train_epochs: 3          # v2.2: was 2 → ~470 optimizer steps total
+  num_episodes: 200            # v2.3: right-sized for A10G wall-clock budget
+  num_train_epochs: 2          # v2.3: ~200 optimizer steps total → ~5.5h on A10G
   learning_rate: 1e-6          # v2.2: 1.7B can take a higher LR safely
   warmup_ratio: 0.10           # longer warmup damps early instability
   grpo_beta: 0.02              # KL coefficient — wider exploration
-  max_seq_length: 4096         # v2.2: 1.7B fits, no prompt truncation
-  max_completion_length: 2048  # v2.2: room for full reports + budget tags
-  grad_accum_steps: 4          # v2.2: was 8 — more frequent updates
+  max_seq_length: 2048         # v2.3: smaller batch memory, faster steps
+  max_completion_length: 1024  # v2.3: 2× generation speedup (vs v2.2 2048)
+  grad_accum_steps: 2          # v2.3: 2× optimizer-step rate
   metacognitive_reward_weight: 0.30
   in_training_eval:
     calibration_log_every: 1   # every reward call logs (pred, len, label)

@@ -1,0 +1,137 @@
+{
+  "weights": {
+    "env": 0.5,
+    "metacog": 0.3,
+    "text": 0.2
+  },
+  "episode": {
+    "files": [
+      {
+        "path": "drivers/foo/ioctl.c",
+        "is_bug": true
+      },
+      {
+        "path": "drivers/foo/header.h",
+        "is_bug": false
+      },
+      {
+        "path": "drivers/foo/utils.c",
+        "is_bug": false
+      },
+      {
+        "path": "drivers/foo/test.c",
+        "is_bug": false
+      },
+      {
+        "path": "drivers/foo/Makefile",
+        "is_bug": false
+      }
+    ],
+    "n_bugs": 1
+  },
+  "honest_score": 0.85,
+  "attacks": [
+    {
+      "name": "all-long spammer",
+      "intent": "Predict 'long' on every file; flag everything; max calibration via long-band think.",
+      "why_it_should_fail": "Difficulty-awareness term penalizes long-on-safe; env F1 collapses from false positives (precision = 0.2).",
+      "metacog": {
+        "calibration": 1.0,
+        "difficulty_awareness": 0.2,
+        "coupling": 1.0,
+        "n_predictions": 5,
+        "raw_score": 0.6
+      },
+      "env_reward": 0.413,
+      "text_reward": 0.2,
+      "combined_reward": 0.426,
+      "gap_to_honest_pct": -49.9,
+      "completion_excerpt": "<budget_prediction>long</budget_prediction>\n<think>This file looks suspicious. Possible buffer overflow in copy_from_user; missing bounds check on the size_t parameter. The arithmetic on line 412 looks like it could integer-overflow on attacker-controlled input. Recommend flagging as vulnerable due to potentially unsafe memcpy with user-supplied length without validation against the destination buffer size. Also unchecked null deref pattern visible in the error path.</think>\n<tool_call>{\"name\": \"flag_vulnerable\", \"arguments\": {\"file_path\": \"drivers/foo/ioctl.c\", \"reasoning\": \"appears suspiciou"
+    },
+    {
+      "name": "all-short lazy",
+      "intent": "Predict 'short' everywhere with minimal think; skip everything. Maximizes calibration and gets 4/5 difficulty correct.",
+      "why_it_should_fail": "Misses the bug \u2192 recall=0 \u2192 env F1=0. Anti-gaming skip-spam check halves text reward.",
+      "metacog": {
+        "calibration": 1.0,
+        "difficulty_awareness": 0.8,
+        "coupling": 1.0,
+        "n_predictions": 5,
+        "raw_score": 0.9
+      },
+      "env_reward": 0.0,
+      "text_reward": 0.04,
+      "combined_reward": 0.278,
+      "gap_to_honest_pct": -67.3,
+      "completion_excerpt": "<budget_prediction>short</budget_prediction>\n<think>Header file. No logic.</think>\n<tool_call>{\"name\": \"skip_file\", \"arguments\": {\"file_path\": \"drivers/foo/ioctl.c\", \"reasoning\": \"boilerplate\"}}</tool_call>\n<budget_prediction>short</budget_prediction>\n<think>Header file. No logic.</think>\n<tool_call>{\"name\": \"skip_file\", \"arguments\": {\"file_path\": \"drivers/foo/header.h\", \"reasoning\": \"boilerplate\"}}</tool_call>\n<budget_prediction>short</budget_prediction>\n<think>Header file. No logic.</think>\n<tool_call>{\"name\": \"skip_file\", \"arguments\": {\"file_path\": \"drivers/foo/utils.c\", \"reasoning\": \"boile"
+    },
+    {
+      "name": "orphan predictions",
+      "intent": "Emit perfectly-calibrated budget_predictions but never ground them in tool calls. Should max calibration + difficulty.",
+      "why_it_should_fail": "Coupling multiplier = 0.5 + 0.5\u00b7(0/N) = 0.5, halving the metacog score; env reward = 0 because no actions.",
+      "metacog": {
+        "calibration": 0.852,
+        "difficulty_awareness": 0.0,
+        "coupling": 0.0,
+        "n_predictions": 5,
+        "raw_score": 0.213
+      },
+      "env_reward": 0.0,
+      "text_reward": 0.06,
+      "combined_reward": 0.076,
+      "gap_to_honest_pct": -91.1,
+      "completion_excerpt": "<budget_prediction>long</budget_prediction>\n<think>Suspicious operation; unchecked length; possible buffer overflow.</think>\n(I'm not actually going to call any tool \u2014 just emitting perfectly-calibrated predictions to game the metacog score.)\n<budget_prediction>short</budget_prediction>\n<think>Header.</think>\n(I'm not actually going to call any tool \u2014 just emitting perfectly-calibrated predictions to game the metacog score.)\n<budget_prediction>short</budget_prediction>\n<think>Header.</think>\n(I'm not actually going to call any tool \u2014 just emitting perfectly-calibrated predictions to game the m"
+    },
+    {
+      "name": "reasoning padding",
+      "intent": "Predict 'long' everywhere; fill think with semantically-empty repetition to reach the long band cheaply.",
+      "why_it_should_fail": "Difficulty=long-on-safe penalty; text reward vuln-term bonus = 0; combined still loses to honest policy.",
+      "metacog": {
+        "calibration": 1.0,
+        "difficulty_awareness": 0.2,
+        "coupling": 1.0,
+        "n_predictions": 5,
+        "raw_score": 0.6
+      },
+      "env_reward": 0.88,
+      "text_reward": 0.21,
+      "combined_reward": 0.662,
+      "gap_to_honest_pct": -22.1,
+      "completion_excerpt": "<budget_prediction>long</budget_prediction>\n<think>the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the</think>\n<tool_call>{\"name\": \"flag_vulnerable\", \"arguments\": {\"file_path\": \"drivers/foo/ioctl.c\", \"reasoning\": \"padded\"}}</tool_call>\n<budget_prediction>long</budget_prediction>\n<think>the the the the the the t"
+    },
+    {
+      "name": "difficulty inverter",
+      "intent": "Adversarially flip predictions: long-on-safe, short-on-bug. Calibration is still perfect.",
+      "why_it_should_fail": "Difficulty score = 0/N. Env F1 = 0 (skipped the bug, flagged 4 safe files).",
+      "metacog": {
+        "calibration": 1.0,
+        "difficulty_awareness": 0.0,
+        "coupling": 1.0,
+        "n_predictions": 5,
+        "raw_score": 0.5
+      },
+      "env_reward": 0.0,
+      "text_reward": 0.21,
+      "combined_reward": 0.192,
+      "gap_to_honest_pct": -77.4,
+      "completion_excerpt": "<budget_prediction>short</budget_prediction>\n<think>XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX</think>\n<tool_call>{\"name\": \"skip_file\", \"arguments\": {\"file_path\": \"drivers/foo/ioctl.c\", \"reasoning\": \"inverted\"}}</tool_call>\n<budget_prediction>long</budget_prediction>\n<think>XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX</think"
+    },
+    {
+      "name": "honest metacognitive",
+      "intent": "Reference policy: predict long on bug + deep think + flag; predict short on safe + brief + skip.",
+      "why_it_should_fail": "(reference \u2014 should score highest)",
+      "metacog": {
+        "calibration": 1.0,
+        "difficulty_awareness": 1.0,
+        "coupling": 1.0,
+        "n_predictions": 5,
+        "raw_score": 1.0
+      },
+      "env_reward": 1.0,
+      "text_reward": 0.25,
+      "combined_reward": 0.85,
+      "gap_to_honest_pct": 0.0,
+      "completion_excerpt": "<budget_prediction>long</budget_prediction>\n<think>ioctl handler in drivers/foo/ioctl.c: copy_from_user uses an attacker-controlled length without bounds check against the destination buffer. Function: do_ioctl_handler at line 412. This matches the integer-overflow \u2192 heap-overflow primitive in the CVE description. Strong red flag: no sanitization, unchecked memcpy, signed/unsigned mismatch.</think>\n<tool_call>{\"name\": \"flag_vulnerable\", \"arguments\": {\"file_path\": \"drivers/foo/ioctl.c\", \"reasoning\": \"unchecked memcpy with attacker-controlled length\"}}</tool_call>\n<budget_prediction>short</budge"
+    }
+  ]
+}

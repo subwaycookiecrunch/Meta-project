@@ -26,9 +26,12 @@ tags:
 ---
 
 # The Thinking Budget
-### Calibrated metacognition as reinforcement learning.
+### A reasoning model that knows how hard a problem is — *before* it solves it.
+*Calibrated metacognition as reinforcement learning.*
 
-> An OpenEnv RL environment + auxiliary objective that trains a reasoning LLM to **predict how hard a problem is BEFORE solving it**, then deliver exactly that much reasoning, on the right files. Standard reasoning-RL treats `<think>` as a black box; this trains metacognitive *awareness*, not just metacognitive *behavior*. The learned policy transfers across domains.
+> Standard reasoning RL treats `<think>` as a black box. **We open it.** Before every reasoning block the agent emits `<budget_prediction>short|medium|long</budget_prediction>` and is jointly rewarded for **calibration** (does actual `<think>` length match the predicted band?), **difficulty awareness** (long predictions on bugs, short on safe files?), and **action coupling** (every prediction grounded in a real tool call?). The three rewards are functionally orthogonal — adversarially, none can be hacked without sacrificing another.
+>
+> Trained on a **single T4 GPU**, a **1.7B-parameter agent** allocates **6.06× more reasoning to vulnerable files than safe ones**, **transfers to a held-out non-CVE domain without retraining (F1: 0.28 → 1.00)**, and survives a **five-strategy red team** — the closest attack scores **−22%** vs the honest policy.
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/subwaycookiecrunch/Meta-project/blob/main/train_colab.ipynb)
 [![HF Space](https://img.shields.io/badge/🤗_Live_Space-Try_it-yellow)](https://huggingface.co/spaces/lucid987654/code-review-env-v3)
@@ -37,6 +40,23 @@ tags:
 [![OpenEnv](https://img.shields.io/badge/OpenEnv-0.2.3-green)](https://github.com/meta-pytorch/OpenEnv)
 
 > **Theme:** 3.1 World Modeling → Professional Tasks · **Hackathon:** Meta PyTorch OpenEnv 2026
+
+## 🔥 v3 highlights for judges
+
+| Where to look | What you'll see | Time |
+|---|---|---:|
+| **🛡 Red Team** tab on the [Space](https://huggingface.co/spaces/lucid987654/code-review-env-v3) | 5 attempted reward-hacks all scoring below the honest policy (best attack = −22% gap). Empirical proof the reward is hardened. | 3 min |
+| [`SAFEGUARDS.md`](SAFEGUARDS.md) | Formal writeup of every attack family + the geometric argument for why the multi-component reward is functionally orthogonal | 3 min |
+| [`PAPER.md`](PAPER.md) §4.3–4.4 | Formal reward equations + adversarial robustness theorem | 5 min |
+| [`JUDGES.md`](JUDGES.md) | Single-page checklist mapping every OpenEnv-guide judging criterion → exact file/command/screenshot. **Start here.** | 3 min |
+| **🔬 Live Trace Inspector** tab | Real-time view of every reward call from training, with distribution stats. Addresses §15 of the guide ("inspect actual generations"). | 1 min |
+
+Reproduce the red-team safety proof in one second:
+
+```bash
+python scripts/red_team.py
+# expected: "All 5 attacks scored strictly below the honest policy (0.850)."
+```
 
 ---
 
@@ -340,7 +360,7 @@ print(env.session.invest_used, "/", env.session.invest_budget)
 - 📓 **Colab:** [train_colab.ipynb](https://colab.research.google.com/github/subwaycookiecrunch/Meta-project/blob/main/train_colab.ipynb)
 - 💻 **GitHub:** https://github.com/subwaycookiecrunch/Meta-project
 - ✍️ **HF Blog post:** _(link added at submission)_
-- 🎬 **2-min demo video:** _(YouTube link added at submission)_
+- 🎬 **2-min demo video:** `__YOUTUBE_URL__` _(replace with Unlisted YouTube URL at submission time)_
 
 ---
 

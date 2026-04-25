@@ -41,7 +41,7 @@
 **Visual:** Scroll back to the Thinking Budget tab. Cursor sweeps between the two panels.
 
 **Voiceover:**
-> "Here's the policy in one image. The untrained Qwen3-8B reasons uniformly on every file — ratio 1.07×. The trained policy concentrates deep reasoning on actually-vulnerable files and stays brief on safe ones — ratio six-point-zero-six×. The reward function isn't shaping individual outputs; it's shaping a **routing** of reasoning effort."
+> "Here's the policy in one image. The untrained baseline reasons uniformly on every file — ratio 1.07×. The trained policy concentrates deep reasoning on actually-vulnerable files and stays brief on safe ones — ratio six-point-zero-six×. The reward function isn't shaping individual outputs; it's shaping a **routing** of reasoning effort."
 
 ---
 

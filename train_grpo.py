@@ -49,32 +49,43 @@ CHECKPOINT_DIR = os.path.join(OUTPUT_DIR, "checkpoints")
 EVAL_CALIBRATION_PATH = os.path.join(OUTPUT_DIR, "eval_calibration.json")
 TRACE_LOG_PATH = os.path.join(OUTPUT_DIR, "trace_log.jsonl")
 
-# Training hyperparameters (tuned for Qwen3-1.7B on the HF Space, v2.2).
-# v2.2 changes vs v2.1 (8B with reverted lengths):
-#   MODEL                   Qwen3-8B → Qwen3-1.7B  (Space cap, faster steps)
-#   MAX_SEQ_LENGTH          2048 → 4096            (no prompt truncation)
-#   MAX_COMPLETION_LENGTH   1024 → 2048            (room for full reports)
-#   NUM_EPISODES            300 → 500              (more diverse rollouts)
-#   NUM_TRAIN_EPOCHS        2 → 3                  (~470 optimizer steps)
-#   GRAD_ACCUM_STEPS        8 → 4                  (more frequent updates)
-#   LEARNING_RATE           5e-7 → 1e-6            (smaller model can take it)
-# What stays from v2.0/v2.1:
-#   WARMUP_RATIO 0.10        — longer warmup damps early instability
-#   GRPO_BETA 0.02           — lower KL allows wider exploration
-#   METACOG_ENABLED true     — the v2 contribution
-NUM_EPISODES = int(os.environ.get("NUM_EPISODES", "500"))
+# Training hyperparameters (right-sized for the available wall-clock —
+# Qwen3-1.7B on the HF Space A10G, v2.3).
+# v2.3 changes vs v2.2 — generation-throughput limited the v2.2 plan:
+#   At 224 s/optimizer-step the v2.2 plan (750 steps) projected a 46h
+#   ETA against a 19h deadline.  The bottleneck was generation length
+#   (~1,200 token mean completions × K=4 ≈ 70s of pure decoding per
+#   prompt).  Halving MAX_COMPLETION_LENGTH and right-sizing the step
+#   budget brings ETA to ~5.5h on A10G with full LR schedule alignment.
+#   MAX_COMPLETION_LENGTH   2048 → 1024            (2× generation speedup)
+#   MAX_SEQ_LENGTH          4096 → 2048            (smaller batch memory)
+#   NUM_EPISODES            500  → 200             (fits the wall-clock)
+#   NUM_TRAIN_EPOCHS        3    → 2               (LR schedule matches)
+#   GRAD_ACCUM_STEPS        4    → 2               (2× more updates / sec)
+# Net optimizer steps: 200 ep × 2 ep / 2 grad_accum = 200 steps total.
+# Warmup ends at step ~20 (10%), then 180 steps of post-warmup learning
+# with cosine LR decay.  Cleaner curve than 750-step plan finishing
+# at 45%.  Cost on A10G: ~$5.80 vs $18 for the v2.2 partial run.
+# What stays from v2.2:
+#   MODEL_NAME              Qwen/Qwen3-1.7B
+#   LEARNING_RATE           1e-6
+#   WARMUP_RATIO            0.10
+#   GRPO_BETA               0.02
+#   METACOG_ENABLED         true
+#   LORA_R / LORA_ALPHA     16 / 32
+NUM_EPISODES = int(os.environ.get("NUM_EPISODES", "200"))
 NUM_GENERATIONS = 2          # GRPO group size
-MAX_COMPLETION_LENGTH = int(os.environ.get("MAX_COMPLETION_LENGTH", "2048"))
+MAX_COMPLETION_LENGTH = int(os.environ.get("MAX_COMPLETION_LENGTH", "1024"))
 BATCH_SIZE = 1
-GRAD_ACCUM_STEPS = int(os.environ.get("GRAD_ACCUM_STEPS", "4"))
+GRAD_ACCUM_STEPS = int(os.environ.get("GRAD_ACCUM_STEPS", "2"))
 LEARNING_RATE = float(os.environ.get("LEARNING_RATE", "1e-6"))
 WARMUP_RATIO = 0.10
-NUM_TRAIN_EPOCHS = int(os.environ.get("NUM_TRAIN_EPOCHS", "3"))
+NUM_TRAIN_EPOCHS = int(os.environ.get("NUM_TRAIN_EPOCHS", "2"))
 GRPO_BETA = 0.02
-MAX_SEQ_LENGTH = int(os.environ.get("MAX_SEQ_LENGTH", "4096"))
+MAX_SEQ_LENGTH = int(os.environ.get("MAX_SEQ_LENGTH", "2048"))
 LORA_R = 16
 LORA_ALPHA = 32
-SAVE_EVERY = 50
+SAVE_EVERY = 25              # More frequent checkpoints (~8 saves total)
 USE_UNSLOTH = os.environ.get("USE_UNSLOTH", "true").lower() == "true"
 
 # Metacognitive reward — the v2 contribution.  When True, the system prompt

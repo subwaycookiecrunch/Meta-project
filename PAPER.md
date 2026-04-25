@@ -143,16 +143,110 @@ Bands map to character ranges (token proxy): `short` ∈ [0, 80),
      multiplier so a model cannot game the score by emitting orphan
      predictions.
 
-### 4.3 Why this design
+### 4.3 Formal definition
 
-We designed for *non-gameability*.  A naive policy that always emits
-`long` and always thinks for 400 chars would max calibration but get
-50% on difficulty awareness on average — the geometric structure of the
-combined reward forces honest self-assessment.  A policy that emits
-short predictions but long thinks gets 0.0 calibration.  A policy that
-emits perfect predictions but never grounds them in tool calls gets a
-0.5× multiplicative penalty.  The only optimum is calibrated, action-
-grounded difficulty assessment.
+Let *C* = (*p*<sub>1</sub>, *T*<sub>1</sub>, *a*<sub>1</sub>), …, (*p*<sub>N</sub>, *T*<sub>N</sub>, *a*<sub>N</sub>) be the sequence
+of (prediction, think-block, tool-call) triples extracted from a
+completion. Let *L*(*T*) denote the character length of think-block *T*,
+let *band*(·) map a band name to its closed-open character interval,
+and let *m*(·) map a band name to its midpoint:
+
+> *band*(short) = [0, 80), &nbsp;*band*(medium) = [80, 250), &nbsp;*band*(long) = [250, ∞)
+
+> *m*(short) = 40, &nbsp;*m*(medium) = 165, &nbsp;*m*(long) = 400
+
+**Calibration** for a single triple is
+
+> *c*<sub>i</sub> = 1 if *L*(*T*<sub>i</sub>) ∈ *band*(*p*<sub>i</sub>); &nbsp; *L*(*T*<sub>i</sub>) / *lo*(*p*<sub>i</sub>) if *L*(*T*<sub>i</sub>) < *lo*(*p*<sub>i</sub>); &nbsp; max(0, 1 − (*L*(*T*<sub>i</sub>) − *hi*(*p*<sub>i</sub>)) / *hi*(*p*<sub>i</sub>)) otherwise
+
+i.e., 1.0 inside the band with smooth linear decay outside.
+
+**Difficulty awareness** depends on the ground-truth label *y*<sub>i</sub> ∈ {0 (safe), 1 (bug), ⊥ (unknown)} of the file referenced by *a*<sub>i</sub>:
+
+> *d*<sub>i</sub> = 1 if (*p*<sub>i</sub> = long ∧ *y*<sub>i</sub> = 1) ∨ (*p*<sub>i</sub> = short ∧ *y*<sub>i</sub> = 0)
+>
+> *d*<sub>i</sub> = 0 if (*p*<sub>i</sub> = long ∧ *y*<sub>i</sub> = 0) ∨ (*p*<sub>i</sub> = short ∧ *y*<sub>i</sub> = 1)
+>
+> *d*<sub>i</sub> = 0.5 otherwise (medium prediction or unknown label)
+
+**Coupling** is the fraction of `<budget_prediction>` tags in the
+completion that are followed (within the same generation) by a tool
+call. Let *P* = total predictions emitted, *N* = predictions with a
+matched tool call. Then
+
+> *coupling* = *N* / max(1, *P*)
+
+**The composite metacognitive reward** is
+
+> *R*<sub>metacog</sub> = ½(*calibration* + *difficulty*) · (½ + ½ · *coupling*) ∈ [0, 1]
+
+where *calibration* = (1/*N*) Σ *c*<sub>i</sub> and *difficulty* = (1/*N*) Σ *d*<sub>i</sub>
+are the means over coupled triples. The factor (½ + ½ · *coupling*)
+hard-caps a fully-uncoupled emitter at 50% of the metacog signal —
+this *multiplicative* form (rather than an additive bonus) is what
+prevents orphan-prediction reward hacking; see §4.5.
+
+**The combined trainer reward** weights three orthogonal signals:
+
+> *R*<sub>final</sub> = 0.50 · *R*<sub>env</sub> + 0.30 · *R*<sub>metacog</sub> + 0.20 · *R*<sub>text</sub>
+
+where *R*<sub>env</sub> is the live MCP environment's composite F1 + thinking-
+efficiency score and *R*<sub>text</sub> is a deterministic format-and-quality
+heuristic (no LLM-as-judge).
+
+### 4.4 Empirical reward-hacking robustness
+
+We adversarially verified the safety property:
+
+> **Property (no-cheat).** For every cheating policy π in our red team,
+> *R*<sub>final</sub>(π) < *R*<sub>final</sub>(π<sub>honest</sub>).
+
+We constructed five attack families spanning the structural failure
+modes of metacognitive RL — calibration-only optimizers, difficulty
+inverters, orphan emitters, and reasoning padders — and ran each
+through the same scoring path the trainer uses (see [`scripts/red_team.py`](scripts/red_team.py)).
+
+| # | Attack | *c* | *d* | coup | *R*<sub>metacog</sub> | *R*<sub>env</sub> | *R*<sub>text</sub> | **R<sub>final</sub>** | gap |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 | All-long spammer | 1.00 | 0.20 | 1.00 | 0.60 | 0.41 | 0.20 | 0.426 | −50% |
+| 2 | All-short lazy | 1.00 | 0.80 | 1.00 | 0.90 | 0.00 | 0.04 | 0.278 | −67% |
+| 3 | Orphan predictions | 0.85 | 0.00 | 0.00 | 0.21 | 0.00 | 0.06 | 0.076 | −91% |
+| 4 | Reasoning padding | 1.00 | 0.20 | 1.00 | 0.60 | 0.88 | 0.21 | 0.662 | **−22%** |
+| 5 | Difficulty inverter | 1.00 | 0.00 | 1.00 | 0.50 | 0.00 | 0.21 | 0.192 | −77% |
+| ✅ | Honest metacognitive | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 0.25 | **0.850** | — |
+
+Attack 4 is the empirical lower bound on the defense margin: a policy
+that takes correct actions but pads `<think>` with semantic-empty
+repetition. The text-reward's vuln-vocabulary heuristic and the
+metacog's difficulty-awareness term together still keep it 22% below
+the honest reference. Attack 2 ("all-short lazy") demonstrates the
+multi-component defense most clearly: it scores 0.90 on the metacog
+reward alone (perfect calibration, 4/5 difficulty correct), but the
+*R*<sub>env</sub> = 0 from skipping the bug zeros out the dominant term.
+
+A formal writeup, including the geometric argument for why the three
+sub-rewards are functionally orthogonal, is in
+[`SAFEGUARDS.md`](SAFEGUARDS.md).
+
+### 4.5 Why this design
+
+We designed for *non-gameability*. The geometric structure of *R*<sub>final</sub>
+forces honest self-assessment because:
+
+- **Calibration alone** is insufficient: an attacker can match length
+  bands without knowing difficulty (attack 5).
+- **Difficulty alone** is insufficient: an attacker can claim long-on-bug
+  without actually delivering long thoughts.
+- **Coupling alone** is insufficient: an attacker can ground predictions
+  in any tool call regardless of correctness.
+- The **multiplicative coupling factor** cuts the floor for
+  uncoupled emitters at 50%, while the **additive env / metacog / text
+  combination** ensures that exploiting one component sacrifices another.
+
+The only policy that maximizes all three sub-rewards simultaneously is
+one that (i) emits calibrated predictions, (ii) bases predictions on
+ground-truth file difficulty, and (iii) takes correct actions on the
+right files. That is the policy we want.
 
 ## 5. Inference-time Budget Enforcement
 
