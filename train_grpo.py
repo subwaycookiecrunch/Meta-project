@@ -317,9 +317,8 @@ def reward_fn(completions, prompts=None, **kwargs):
                 seed = int(seed_match.group(1)) if seed_match else (idx * 7 + 42)
 
                 # Reset environment with the matching episode
-                env.env.reset(seed=seed, difficulty="easy")
-                env._context = env.env._get_observation().metadata.get("context", "")
-                env._files = re.findall(r'• (.+?)\s+\[', env._context)
+                random.seed(seed)
+                context = env.reset()
                 env.done = False
                 env.reward = 0.0
 
@@ -604,13 +603,9 @@ def main():
     prompts = []
     env = CodeReviewToolEnv()
     for i in range(NUM_EPISODES):
-        seed = i * 7 + 42  # deterministic, reproducible seeds
-        env.env.reset(seed=seed, difficulty=random.choice(["easy", "medium"]))
-        # Get context from the environment observation
-        obs = env.env._get_observation()
-        context = obs.metadata.get("context", "")
-        env._context = context
-        env._files = re.findall(r'• (.+?)\s+\[', context)
+        seed = i * 7 + 42
+        random.seed(seed)  # Seed for reproducibility
+        context = env.reset()  # reset() already returns the context string
         # Embed seed in the context so reward_fn can replay this exact episode
         context_with_seed = f"<!-- episode_seed={seed} -->\n{context}"
         formatted = format_prompt_as_chat(context_with_seed, tokenizer)
