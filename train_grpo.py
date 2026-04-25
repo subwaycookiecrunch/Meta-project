@@ -592,7 +592,12 @@ def main():
         model = get_peft_model(model, lora_config)
         model.gradient_checkpointing_enable()
 
-    # Ensure pad token
+    # CRITICAL FIX: TRL GRPOTrainer bug workaround
+    # TRL expects model.warnings_issued to exist, but some models (like Qwen3) don't have it.
+    if not hasattr(model, "warnings_issued"):
+        model.warnings_issued = {}
+
+    # ── Ensure pad token ────────────────────────────
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
