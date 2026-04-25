@@ -54,8 +54,8 @@ def run_training():
     """Run GRPO training in a background thread."""
     training_status["running"] = True
     training_status["progress"] = "Starting training script..."
+    training_status["done"] = False
     try:
-        # Redirect stdout to capture progress
         import subprocess
         proc = subprocess.Popen(
             [sys.executable, "train_grpo.py"],
@@ -68,24 +68,31 @@ def run_training():
         lines = []
         for line in proc.stdout:
             lines.append(line.strip())
-            # Keep last 10 lines as progress
-            training_status["progress"] = "\n".join(lines[-10:])
+            training_status["progress"] = "\n".join(lines[-15:])
+            print(line.strip())  # Also print to container logs
 
-        proc.wait()
-        training_status["done"] = True
+        exit_code = proc.wait()
+        if exit_code == 0 and os.path.exists(os.path.join(RESULTS_DIR, "training_stats.json")):
+            training_status["done"] = True
+            training_status["progress"] = "Training complete!"
+        else:
+            training_status["done"] = False
+            error_lines = "\n".join(lines[-20:])
+            training_status["progress"] = f"❌ Training FAILED (exit code {exit_code}):\n\n```\n{error_lines}\n```\n\nClick Start Training to retry."
         training_status["running"] = False
-        training_status["progress"] = "Training complete!"
     except Exception as e:
         training_status["running"] = False
-        training_status["progress"] = f"Error: {str(e)}"
+        training_status["done"] = False
+        training_status["progress"] = f"❌ Error: {str(e)}\n\nClick Start Training to retry."
 
 
 def start_training():
     if training_status["running"]:
-        return "⚠️ Training is already running!"
-    if training_status["done"]:
+        return "⚠️ Training is already running! Click Refresh Status to check progress."
+    if training_status["done"] and os.path.exists(os.path.join(RESULTS_DIR, "training_stats.json")):
         return "✅ Training already completed! See results below."
-    # Start training in background thread
+    # Reset status and start training in background thread
+    training_status["done"] = False
     thread = threading.Thread(target=run_training, daemon=True)
     thread.start()
     return "🚀 Training started! This will take 3-5 hours. Do NOT restart the Space."
