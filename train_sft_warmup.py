@@ -155,7 +155,7 @@ def main():
         save_strategy="epoch",
         fp16=False,
         bf16=True,
-        max_seq_length=MAX_SEQ_LENGTH,
+        max_length=MAX_SEQ_LENGTH,
         dataset_text_field="text",
         report_to="none",
         optim="adamw_8bit",

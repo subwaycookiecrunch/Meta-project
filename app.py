@@ -505,14 +505,15 @@ def run_training():
         # If SFT adapter exists, tell GRPO to load it + use optimized
         # hyperparams for the post-SFT regime (the model already knows
         # the output format, so we can train faster and with higher LR)
-        if os.path.exists(sft_adapter):
+        sft_weights = os.path.join(sft_adapter, "adapter_model.safetensors")
+        if os.path.exists(sft_weights):
             env["ADAPTER_PATH"] = sft_adapter
-            env["NUM_EPISODES"] = "150"       # 1 epoch, not 2
-            env["NUM_TRAIN_EPOCHS"] = "1"     # single pass
-            env["LEARNING_RATE"] = "5e-6"     # 5x higher (format is stable)
+            env["NUM_EPISODES"] = "200"
+            env["NUM_TRAIN_EPOCHS"] = "1"
+            env["LEARNING_RATE"] = "5e-6"
             env["GRAD_ACCUM_STEPS"] = "2"
             print(f"📋 GRPO will load SFT adapter from {sft_adapter}")
-            print(f"📋 Using post-SFT hyperparams: 150 eps, 1 epoch, lr=5e-6")
+            print(f"📋 Using post-SFT hyperparams: 200 eps, 1 epoch, lr=5e-6")
 
         proc = subprocess.Popen(
             [sys.executable, "train_grpo.py"],
