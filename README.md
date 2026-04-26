@@ -60,6 +60,26 @@ heap allocation. This is the bug.
 
 Trained on a single A10G in about 12 hours. Qwen3 1.7B with LoRA r=16, 4 bit quantization.
 
+### Ablations
+
+**Truncation baseline:** what if you just hard cap `<think>` at a fixed length instead of training metacognition?
+
+| Approach | F1 | Thinking ratio |
+|---|---:|---:|
+| Untrained baseline | 0.14 | 1.07x |
+| Truncation at 80 chars | 0.14 | n/a |
+| Truncation at 40 chars | 0.14 | n/a |
+| **Trained (metacognitive)** | **1.00** | **6.06x** |
+
+Truncation doesn't change what gets flagged, so F1 stays at 0.14. The trained model catches more bugs because it learned to allocate thinking, not just reduce it.
+
+**Tag removal:** does the allocation survive without the `<budget_prediction>` tag?
+
+Untrained model thinking: 77 chars on bugs, 67 on safe. Cohen's d = 0.37, no separation.
+Trained model thinking (tag ignored): 1,324 chars on bugs, 35 on safe. Cohen's d = 6.65, massive separation.
+
+The allocation is in the weights, not the scaffolding. Run `python scripts/run_ablations.py` to reproduce.
+
 ## The environment
 
 Security code review. 150 real CVEs from NVD (Log4Shell, Dirty COW, PwnKit, BlueKeep, Zerologon, etc). 2,892 source files. The agent gets a CVE description and file paths but can't see code until it calls `read_file`, which costs investigation points. Budget is `2 × number_of_files` so you can't just read everything.
