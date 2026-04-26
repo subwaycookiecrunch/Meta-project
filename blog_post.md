@@ -146,6 +146,8 @@ F1 went from 0.14 to 1.00 across the evaluation episodes.
 
 ![Full improvement summary](https://huggingface.co/spaces/lucid987654/code-review-env-v3/resolve/main/grpo_output/improvement_panel.png)
 
+One thing I didn't do that I should have: compare against naive truncation. Like, what if you just hard-cut `<think>` at 80 tokens for every file? No prediction, no metacognition, just a brute-force cap. The trained model would almost certainly still win because truncation doesn't help you *detect bugs better* — it just makes you think less. But it deserves a row in the table and I don't have it. Noted for future work.
+
 ---
 
 ## Does it transfer? (kinda, but read the caveat)
@@ -170,7 +172,11 @@ Wanted curriculum learning — start easy, ramp up as calibration improves. Got 
 
 There's also an inference-time `LogitsProcessor` that hard-caps `<think>` tokens. When budget runs out it force-emits `</think>`. The trained model handles it gracefully because it already knows how to be brief. The untrained model just cuts off mid-sentence. There's a slider on the Space if you want to play with it.
 
-One thing I keep thinking about: what happens if you train with the `<budget_prediction>` tag and then *remove it* at inference? Does the model still allocate correctly? If yes, that means the reasoning allocation got baked into the weights and doesn't need the scaffolding anymore. I think the answer is yes but I haven't tested it.
+One thing I keep thinking about: what happens if you train with the `<budget_prediction>` tag and then *remove it* at inference? Does the model still allocate correctly without the explicit pre-commitment step?
+
+This is actually a bigger question than it sounds. Right now I can't tell you whether the tag *causes* better allocation or just *correlates* with it. Maybe the model learned to reason better in general and the tag is just along for the ride. Maybe the tag is doing all the work and the reasoning improvement is downstream of it. I don't have the ablation to separate these.
+
+But if you remove the tag and the behavior persists — if the model still thinks briefly on easy files and deeply on hard ones without being asked to predict upfront — then the metacognitive calibration is representational. It's in the weights, not in the scaffolding. That's the version of this that's actually interesting as a research direction. Haven't tested it, but it's first on the list.
 
 ---
 
