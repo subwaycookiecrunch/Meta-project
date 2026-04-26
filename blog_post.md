@@ -9,7 +9,7 @@ authors:
 
 # I taught a 1.7B model to know when not to think hard
 
-![The Thinking Budget — Hero Graph](grpo_output/thinking_allocation.png)
+![The Thinking Budget — Hero Graph](https://raw.githubusercontent.com/subwaycookiecrunch/Meta-project/main/grpo_output/thinking_allocation.png)
 
 I kept watching Qwen3 generate 4,000 token `<think>` blocks on files that were obviously fine. Like, `extern int x;` does not need 3 paragraphs of analysis. But the model doesn't know that. It just thinks the same amount on everything.
 
@@ -27,7 +27,7 @@ So I tried training it to stop doing that.
 
 [live Space](https://huggingface.co/spaces/lucid987654/code-review-env-v3) | [GitHub](https://github.com/subwaycookiecrunch/Meta-project)
 
-![The Thinking Budget — Hero Graph](grpo_output/thinking_allocation.png)
+
 
 ## The setup
 
@@ -132,13 +132,13 @@ Calibration accuracy hit 88% on the diagonal (random would be 33%). P(long | bug
 
 ### Training curve (200 GRPO steps, actual data)
 
-![Training Curves](grpo_output/training_curves.png)
+![Training Curves](https://raw.githubusercontent.com/subwaycookiecrunch/Meta-project/main/grpo_output/training_curves.png)
 
 200 steps on a single A10G. EMA reward trends upward, non-zero rate climbs from ~60% to 83%, peak reward 0.252 at step 129. The violin plot shows the late-half distribution shifting up vs the early half (μ = 0.059 vs 0.052).
 
 ### The full improvement at a glance
 
-![Improvement Panel](grpo_output/improvement_panel.png)
+![Improvement Panel](https://raw.githubusercontent.com/subwaycookiecrunch/Meta-project/main/grpo_output/improvement_panel.png)
 
 Four axes of improvement in one figure: reward convergence, task F1 (0.14 → 1.00), transfer F1 to unseen domain (0.28 → 1.00), and red-team robustness (all 5 attacks defeated, closest gap −22%).
 
