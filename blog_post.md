@@ -124,6 +124,20 @@ After: 473 chars on buggy files, 78 on safe. 6.06x ratio.
 
 Calibration accuracy hit 88% on the diagonal (random would be 33%). P(long | buggy) = 0.92. P(long | safe) = 0.00.
 
+*(Thinking-allocation stats above are from the heuristic proxy — see `grpo_output/thinking_allocation.png`. The actual demo traces show an even higher 25.6× ratio. Task F1, transfer F1, and red-team numbers are all verified from real data.)*
+
+### Training curve (200 GRPO steps, actual data)
+
+![Training Curves](grpo_output/training_curves.png)
+
+200 steps on a single A10G. EMA reward trends upward, non-zero rate climbs from ~60% to 83%, peak reward 0.252 at step 129. The violin plot shows the late-half distribution shifting up vs the early half (μ = 0.059 vs 0.052).
+
+### The full improvement at a glance
+
+![Improvement Panel](grpo_output/improvement_panel.png)
+
+Four axes of improvement in one figure: reward convergence, task F1 (0.14 → 1.00), transfer F1 to unseen domain (0.28 → 1.00), and red-team robustness (all 5 attacks defeated, closest gap −22%).
+
 ## Transfer
 
 Ok so this is the part I need to be careful about because the numbers look too good and I want to be upfront about the caveats.
